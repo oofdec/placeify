@@ -43,6 +43,7 @@ If you want to run main.py, you’ll need these dependencies installed:
     - pypresence
     - pywinstyles
     - asyncio
+    - mutagen
     - io (BytesIO)
     - ffmpeg (external)
     - ffprobe (external)
