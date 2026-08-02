@@ -53,11 +53,17 @@ Once installed simply, run:
 
 `main.py`
 
+**⚠️⚠️IMPORTANT⚠️⚠️**
+
+You **NEEEEEED** **FFMPEG** AND **FFPROBE** IN YOUR LOCAL DIRECTORY.
+
+You can find it here: `https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-essentials.7z`
+
 -------------------------------------------------------------------------------
 📜**LICENSE**
 
 Placeify uses the **MIT License**, partially so that you can use it, and so that I don't get sued if something doesn't work.
-You can find that in the `LISENCE` file or in the "License" section on the repository page.
+You can find that in the `LICENSE` file or in the "License" section on the repository page.
 
 -------------------------------------------------------------------------------
 🪳**BUGS AND ERRORS**
