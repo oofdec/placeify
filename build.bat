@@ -1,0 +1,1 @@
+pyinstaller --onefile --noconsole --add-data "placeify.ico;." --icon="placeify.ico" miam.py
