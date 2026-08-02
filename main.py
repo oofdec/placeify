@@ -64,9 +64,12 @@ if USE_DISCORD_RICHPRECENSE:
 
 #threading.Thread(target=update_presence,args=("vibing to","details text")).start()
 
+#stuff to do:
 
 #ORGANIZE!
 #add post image grabbing que
+
+#make ui more, like   uhhhhhh useable somehow
 
 
 mixer.init()
@@ -74,6 +77,12 @@ mixer.init()
 
 #-----------------------------------------------------------------------------------------------------------
 #-----------music file stuff--------------------------------------------------------------------------------
+def valid_audio_name(name):
+    if ".mp3" in name or ".ogg" in name or ".wav" in name:
+        return True
+    else:
+        return False
+
 
 def safeload_song(name, usedir=False):
     image_data = None
@@ -117,7 +126,7 @@ def compile_music_cache():
 
     for songname in music_dir: # filter mp3
         _, ext = os.path.splitext(songname)
-        if ext == ".mp3":
+        if valid_audio_name(ext):
             all_songs.append(safeload_song(songname))
         if ext == "":
             all_songs.append((Image.new("RGBA",size=(1,1)),None,songname,""))
@@ -125,8 +134,10 @@ def compile_music_cache():
 compile_music_cache()
 
 
+#deprecated  dont use that
+#image, sound = safeload_song("song.mp3")
 
-#image, sound = safeload_song("moribund.mp3")
+
 def cubic_bounce(start, end, t):
     # clamp t to [0, 1]
     if t < 0: t = 0
@@ -155,10 +166,10 @@ def download_youtube(url):
                 'preferredquality': '192',
             },
             {
-                'key': 'FFmpegMetadata',   # <-- THIS IS THE MAGIC
+                'key': 'FFmpegMetadata',   # <-- mm yes ffmpeg
             },
             {
-                'key': 'EmbedThumbnail',   # embeds thumbnail into MP3
+                'key': 'EmbedThumbnail',   # embeds thumbnail into mp3 somehow
             }
         ]
     }
@@ -166,12 +177,13 @@ def download_youtube(url):
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
 
+    #is all of this stored in the mp3?    dunno, probs wont accsess it anyway
     print("Title:", info.get("title"))
     print("Uploader:", info.get("uploader"))
-    #print("Tags:", info.get("tags"))
-    #print("Description:", info.get("description"))
-    #print("Channel:", info.get("channel"))
-    #print("Upload date:", info.get("upload_date"))
+    print("Tags:", info.get("tags"))
+    print("Description:", info.get("description"))
+    print("Channel:", info.get("channel"))
+    print("Upload date:", info.get("upload_date"))
 
 
 #-----------------------------------------------------------------------------------------------------------
@@ -232,20 +244,84 @@ def manage_pause(customstate=None):
     if current_state: # true = paused
         # fold whatever time has passed since the last play/resume into seek_offset,
         # so we "freeze" the exact position instead of losing track of it
+
         seek_offset = get_current_track_pos()
         mixer.music.pause()
         threading.Thread(target=update_presence,args=(str(CURRENT_TRACKDATA[2]).replace(".mp3",""),"(paused) vibing to:")).start()
-        pause_butt.configure(text="⏸️")
+        pause_butt.configure(text="▶️")
     else:
         mixer.music.play(start=seek_offset)
         play_start_time = time.time()
         threading.Thread(target=update_presence,args=(str(CURRENT_TRACKDATA[2]).replace(".mp3",""),"vibing to:")).start()
-        pause_butt.configure(text="▶️")
+        pause_butt.configure(text="⏸️")
 
     pause_state.set(current_state)
 
 pause_butt = ctk.CTkButton(bottom_timeline_bar,text="▶️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=manage_pause)
 pause_butt.place(relx=0.04,rely=0.05)
+
+def skip_next_song():
+    global PLAYING_INDEX
+    global FOCUS_INDEX
+
+    if PLAYING_INDEX != None:
+        sus_index = (PLAYING_INDEX+1)%(len(all_songs))
+
+        PLAYING_INDEX = (PLAYING_INDEX+1)%(len(all_songs))
+        FOCUS_INDEX = PLAYING_INDEX
+
+        if valid_audio_name(all_songs[sus_index][2]):
+            select_song(PLAYING_INDEX)
+            apply_playoffset_tween()
+
+seek_next_song_butt = ctk.CTkButton(bottom_options_bar,text="➡️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=skip_next_song)
+seek_next_song_butt.place(relx=0.25,rely=0.05)
+
+def find_random_valid_song_in_dir():
+    song_exists_number = 0 
+    for i in range(len(all_songs)):
+        if "mp3" in all_songs[i][2]:
+            song_exists_number += 1
+
+    if song_exists_number > 1:
+        random_song = random.randint(0,len(all_songs)-1)
+
+        found_song = False
+        current_song = "" if PLAYING_INDEX == None else all_songs[PLAYING_INDEX][2]
+        while not found_song:
+            if valid_audio_name(all_songs[random_song][2]) and current_song != all_songs[random_song][2]:
+                found_song = True
+            else:
+                random_song = random.randint(0,len(all_songs)-1)
+                           
+        return random_song
+    return None
+
+
+def random_song():
+    global PLAYING_INDEX
+    global FOCUS_INDEX
+
+    random_song = find_random_valid_song_in_dir()
+
+    if random_song != None:
+        print(random_song)
+        PLAYING_INDEX = random_song
+        FOCUS_INDEX = random_song
+
+        select_song(random_song)
+        apply_playoffset_tween()
+
+#random_song_butt_image = ctk.CTkImage(Image.open(resource_path("assets/shuffle.png")))
+
+random_song_butt = ctk.CTkButton(bottom_options_bar,text="🔀",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=random_song,font=("ariel",15,"bold"))
+random_song_butt.place(relx=0.35,rely=0.045)
+
+
+#rename_song_butt = ctk.CTkButton(bottom_options_bar,text="✏️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=random_song,font=("ariel",15,"bold"))
+#rename_song_butt.place(relx=0.55,rely=0.045)
+
+
 
 def seek_pos(event):
     global seek_offset
@@ -275,6 +351,7 @@ def import_menu_close():
     bg_frame.place_forget()
     musicmenu.place_forget()
     dirmenu.place_forget()
+    settmenu.place_forget()
 
 close = ctk.CTkButton(bg_frame,text="❌",fg_color="black",hover_color="grey",width=20,command=import_menu_close)
 close.place(relx=0.95,rely=0.01)
@@ -351,7 +428,16 @@ def add_music_menu():
     bg_frame.lift()
     musicmenu.lift()
 
+def set_volume_slider(event=None):
+    mixer.music.set_volume(volume_slider.get()/2)
 
+volume_frame = ctk.CTkFrame(root,corner_radius=5,border_width=2,bg_color="#474747")
+volume_frame.place(relx=0,rely=0.565,relwidth=0.04,relheight=0.3)
+
+volume_slider = ctk.CTkSlider(volume_frame,orientation="vertical",command=set_volume_slider)
+volume_slider.place(relx=0.2,rely=0.02,relheight=0.95)
+volume_slider.set(0.2)
+set_volume_slider()
 
 add_music_butt = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="➕",width=25,command=add_music_menu)
 add_music_butt.place(relx=0.07,rely=0.05)
@@ -391,7 +477,7 @@ def create_dir():
 add_dir_butt = ctk.CTkButton(dirmenu,text="Add",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",command=create_dir)
 add_dir_butt.place(relx=0.72,rely=0.85)
 
-def add_directory():
+def add_directory_menu():
     bg_frame.place(relwidth=1,relheight=1)
     dirmenu.place(relx=0.1,relwidth=0.8,
                 rely=0.1,relheight=0.8)
@@ -400,11 +486,36 @@ def add_directory():
     bg_frame.lift()
     dirmenu.lift()
 
+#add_dir_image = ctk.CTkImage(Image.open(resource_path("assets/real folder.png")))
 
-add_directory_butt = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="📂",width=25,command=add_directory,height=15)
+add_directory_butt = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="📂",width=25,command=add_directory_menu,height=15,font=("ariel",15,"bold"))
 add_directory_butt.place(relx=0.17,rely=0.05)
 
-after_song_mode = ctk.CTkOptionMenu(bottom_options_bar,values=("Wait","Shuffle","Loop"),fg_color="#1a1a1a",dropdown_fg_color="#1a1a1a",button_color="#1a1a1a",button_hover_color="#333333")
+#####################################
+#SETTINGS MENU#######################
+#####################################
+def settings_menu():
+    bg_frame.place(relwidth=1,relheight=1)
+    settmenu.place(relx=0.1,relwidth=0.8,
+                rely=0.1,relheight=0.8)
+
+
+    bg_frame.lift()
+    settmenu.lift()
+
+
+settmenu = ctk.CTkScrollableFrame(root,border_width=2)
+
+setttitle = ctk.CTkLabel(settmenu,text="Settings",font=("aeril",28,"bold"))
+setttitle.place(x=5,y=5)
+
+
+
+
+settings_button = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="⚙️",width=25,command=settings_menu,height=15,font=("ariel",15,"bold"))
+settings_button.place(relx=0.45,rely=0.05)
+
+after_song_mode = ctk.CTkOptionMenu(bottom_options_bar,values=("Wait","Shuffle","Next","Loop"),fg_color="#1a1a1a",dropdown_fg_color="#1a1a1a",button_color="#1a1a1a",button_hover_color="#333333")
 after_song_mode.place(relx=0.7,relwidth=0.29,rely=0.09,relheight=0.67)
 
 def apply_playoffset_tween(time=0):
@@ -633,26 +744,10 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
 
             #SHUFFLE
             if after_song_mode.get() == "Shuffle":
-                song_exists_number = 0 
-                for i in range(len(all_songs)):
-                    if "mp3" in all_songs[i][2]:
-                        song_exists_number += 1
+                random_song() # after all of that pain, this just happens
 
-                if song_exists_number > 1:
-                    random_song = random.randint(0,len(all_songs)-1)
-
-                    found_song = False
-                    current_song = "" if PLAYING_INDEX == None else all_songs[PLAYING_INDEX][2]
-                    while not found_song:
-                        if ("mp3" in all_songs[random_song][2]) and current_song != all_songs[random_song][2]:
-                            print("Found a song!")
-                            found_song = True
-                        else:
-                            random_song = random.randint(0,len(all_songs)-1)
-                           
-                    FOCUS_INDEX = random_song
-                    PLAYING_INDEX = random_song
-                    select_song(customindex=random_song)
+            if after_song_mode.get() == "Next":
+                skip_next_song()
 
     distance = FOCUS_INDEX - RENDER_INDEX - 3
     RENDER_INDEX += (distance / 8)
@@ -662,7 +757,7 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
     root.after(16,interpolate_render_index)
 
 
-root.iconbitmap(resource_path("placeify.ico"))
+root.iconbitmap(resource_path("assets/placeify.ico"))
 root.bind("<MouseWheel>",scroll_wheel)
 
 root.after(0,create_songframes)
