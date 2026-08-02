@@ -1,6 +1,6 @@
 pyinstaller --onefile --noconsole ^
   --add-data "assets;." ^
-  --icon="assets/placeify.ico" ^
+  --icon="assets/placeify.ico;." ^
   --hidden-import=yt_dlp ^
   --hidden-import=yt_dlp.extractor ^
   --hidden-import=yt_dlp.postprocessor ^
