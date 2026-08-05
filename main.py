@@ -1,3 +1,5 @@
+#HEY!  release 5 is OUT!
+
 import math
 import time
 import customtkinter as ctk
@@ -15,10 +17,46 @@ import random
 import asyncio
 
 
-def resource_path(path):
-    if hasattr(sys, "_MEIPASS"):
-        return os.path.join(sys._MEIPASS, path)
-    return path
+
+def find_best_music_dir(): # this is so stable trust bro trust
+    appdata_path = os.getenv('APPDATA')
+
+    placeify_path = os.path.join(appdata_path,"placeify")
+    musiclocation_path = os.path.join(appdata_path,"placeify","musicdir") # should contain path to music folder
+    music_dir_path = ""
+    # check for existsing path
+
+    if os.path.exists(musiclocation_path): #if location file exists, check if the location is valid. if so, return it.
+        with open(musiclocation_path, "r") as f:
+            music_dir_path = f.read()
+            if not os.path.exists(music_dir_path):
+                os.mkdir(os.path.join(placeify_path,"music"))
+            return music_dir_path
+ 
+    else: # if locationfile dosnt exist
+        if not os.path.exists(placeify_path):
+            os.mkdir(placeify_path)
+
+        if not os.path.exists(os.path.join(placeify_path,"music")):
+            os.mkdir(os.path.join(placeify_path,"music"))
+
+        if not os.path.exists(musiclocation_path):
+            with open(musiclocation_path,"w") as f:
+                f.write(os.path.join(placeify_path,"music"))
+                return os.path.join(placeify_path,"music")
+        else:
+            with open(musiclocation_path,"r") as f:
+                return f.read()
+
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 
 USE_DISCORD_RICHPRECENSE = True
 CLIENT_ID = "1532524855130587216"
@@ -64,12 +102,9 @@ if USE_DISCORD_RICHPRECENSE:
 
 #threading.Thread(target=update_presence,args=("vibing to","details text")).start()
 
-#stuff to do:
 
 #ORGANIZE!
 #add post image grabbing que
-
-#make ui more, like   uhhhhhh useable somehow
 
 
 mixer.init()
@@ -116,7 +151,10 @@ def safeload_song(name, usedir=False):
     return image, songpath, name, uploader
 
 
-GLOBAL_MUSIC_DIR = "music"
+GLOBAL_MUSIC_DIR = find_best_music_dir()
+BASE_DIR = GLOBAL_MUSIC_DIR
+print("GLOBAL DIR: "+GLOBAL_MUSIC_DIR)
+
 all_songs = []
 
 def compile_music_cache():
@@ -130,6 +168,8 @@ def compile_music_cache():
             all_songs.append(safeload_song(songname))
         if ext == "":
             all_songs.append((Image.new("RGBA",size=(1,1)),None,songname,""))
+
+
 
 compile_music_cache()
 
@@ -257,6 +297,7 @@ def manage_pause(customstate=None):
 
     pause_state.set(current_state)
 
+
 pause_butt = ctk.CTkButton(bottom_timeline_bar,text="▶️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=manage_pause)
 pause_butt.place(relx=0.04,rely=0.05)
 
@@ -276,6 +317,23 @@ def skip_next_song():
 
 seek_next_song_butt = ctk.CTkButton(bottom_options_bar,text="➡️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=skip_next_song)
 seek_next_song_butt.place(relx=0.25,rely=0.05)
+
+def skip_backwards_song():
+    global PLAYING_INDEX
+    global FOCUS_INDEX
+
+    if PLAYING_INDEX != None:
+        sus_index = (PLAYING_INDEX-1)%(len(all_songs))
+
+        PLAYING_INDEX = (PLAYING_INDEX-1)%(len(all_songs))
+        FOCUS_INDEX = PLAYING_INDEX
+
+        if valid_audio_name(all_songs[sus_index][2]):
+            select_song(PLAYING_INDEX)
+            apply_playoffset_tween()
+
+seek_next_song_butt = ctk.CTkButton(bottom_options_bar,text="⬅️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=skip_backwards_song)
+seek_next_song_butt.place(relx=0.17,rely=0.05)
 
 def find_random_valid_song_in_dir():
     song_exists_number = 0 
@@ -321,8 +379,6 @@ random_song_butt.place(relx=0.35,rely=0.045)
 #rename_song_butt = ctk.CTkButton(bottom_options_bar,text="✏️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=random_song,font=("ariel",15,"bold"))
 #rename_song_butt.place(relx=0.55,rely=0.045)
 
-
-
 def seek_pos(event):
     global seek_offset
 
@@ -346,7 +402,7 @@ timeline_slider.lift()
 
 bg_frame = ctk.CTkFrame(root,fg_color="black")
 pywinstyles.set_opacity(bg_frame, value=0.8)
-    
+
 def import_menu_close():
     bg_frame.place_forget()
     musicmenu.place_forget()
@@ -408,12 +464,17 @@ def safe_import_yturl():
 import_button = ctk.CTkButton(yt_menu,text="Import",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",command=safe_import_yturl)
 import_button.place(relx=0.72,rely=0.85)
 
-from_yt_button = ctk.CTkButton(musicmenu,text="Download from YouTube",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",font=("areil",18,"bold"))
-from_yt_button.place(relx=0.02,rely=0.05)
+def add_yt_menu():
+    bg_frame.place(relwidth=1,relheight=1)
+    yt_menu.place(relx=0,rely=0.18,relwidth=1,relheight=0.82)
+    dirmenu.place_forget()
 
-#Choose from FILE STUFF
-choose_from_file = ctk.CTkButton(musicmenu,text="Upload Local File",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",font=("areil",18,"bold"))
-choose_from_file.place(relx=0.68,rely=0.05)
+    bg_frame.lift()
+    musicmenu.lift()
+
+
+from_yt_button = ctk.CTkButton(musicmenu,text="YouTube Download",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",font=("areil",18,"bold"),command=add_yt_menu)
+from_yt_button.place(relx=0.02,rely=0.05)
 
 def add_music_menu():
     location_entry.configure(state="normal")
@@ -444,7 +505,7 @@ add_music_butt.place(relx=0.07,rely=0.05)
 
 #ADD DIRECTORY
 
-dirmenu = ctk.CTkFrame(root,border_width=2)
+dirmenu = ctk.CTkFrame(musicmenu,border_width=2)
 
 dirtitle = ctk.CTkLabel(dirmenu,text="Enter Directory Name:",font=("aeril",28,"bold"))
 dirtitle.place(relx=0.05,rely=0.1)
@@ -454,6 +515,8 @@ dirname.place(relx=0.05,rely=0.25,relwidth=0.8)
 
 dir_status = ctk.CTkLabel(dirmenu,text="",text_color="red")
 dir_status.place(relx=0.1,rely=0.85)
+
+
 
 def create_dir():
     try:
@@ -474,22 +537,25 @@ def create_dir():
         dir_status.configure(text="An error occured. Please make sure that the \n name is avalable")
 
 
-add_dir_butt = ctk.CTkButton(dirmenu,text="Add",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",command=create_dir)
-add_dir_butt.place(relx=0.72,rely=0.85)
-
 def add_directory_menu():
     bg_frame.place(relwidth=1,relheight=1)
-    dirmenu.place(relx=0.1,relwidth=0.8,
-                rely=0.1,relheight=0.8)
-
+    dirmenu.place(relx=0,rely=0.18,relwidth=1,relheight=0.82)
+    yt_menu.place_forget()
 
     bg_frame.lift()
-    dirmenu.lift()
+    musicmenu.lift()
 
 #add_dir_image = ctk.CTkImage(Image.open(resource_path("assets/real folder.png")))
 
-add_directory_butt = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="📂",width=25,command=add_directory_menu,height=15,font=("ariel",15,"bold"))
-add_directory_butt.place(relx=0.17,rely=0.05)
+import_dir_button = ctk.CTkButton(dirmenu,text="Add Directory",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",command=create_dir)
+import_dir_button.place(relx=0.72,rely=0.85)
+
+dir_menu_butt = ctk.CTkButton(musicmenu,text="Create Directory",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",font=("areil",18,"bold"),command=add_directory_menu)
+dir_menu_butt.place(relx=0.68,rely=0.05)
+
+
+previouse_dir_button =  ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="⏪",width=25,command=lambda: select_song(songdir=CURRENT_TRACKDATA[1]),height=15,font=("ariel",15,"bold"))
+previouse_dir_button.place(relx=0.45,rely=0.05)
 
 #####################################
 #SETTINGS MENU#######################
@@ -509,11 +575,8 @@ settmenu = ctk.CTkScrollableFrame(root,border_width=2)
 setttitle = ctk.CTkLabel(settmenu,text="Settings",font=("aeril",28,"bold"))
 setttitle.place(x=5,y=5)
 
-
-
-
 settings_button = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="⚙️",width=25,command=settings_menu,height=15,font=("ariel",15,"bold"))
-settings_button.place(relx=0.45,rely=0.05)
+settings_button.place(relx=0.59,rely=0.05)
 
 after_song_mode = ctk.CTkOptionMenu(bottom_options_bar,values=("Wait","Shuffle","Next","Loop"),fg_color="#1a1a1a",dropdown_fg_color="#1a1a1a",button_color="#1a1a1a",button_hover_color="#333333")
 after_song_mode.place(relx=0.7,relwidth=0.29,rely=0.09,relheight=0.67)
@@ -547,7 +610,7 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
 
     manage_pause(customstate=False) # starts playback from seek_offset (0) and sets play_start_time
 
-    song_title_text.configure(text=name.replace(".mp3",""))
+    song_title_text.configure(text=os.path.basename(name).replace(".mp3",""))
     song_creator_text.configure(text=uploader)
 
     threading.Thread(target=update_presence,args=(name.replace(".mp3",""),"vibing to:")).start()
@@ -568,7 +631,6 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
     image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     bgimage = ctk.CTkImage(image, size=(new_width, new_height))
     bglabel.configure(image=bgimage)
-
 
 def bind_songframe_button_thing(selection_index):
     global FOCUS_INDEX
@@ -621,7 +683,7 @@ def bind_songframe_button_thing(selection_index):
 
                 root.after(0,create_songframes)
 
-def create_songframes(spaceing=10):
+def create_songframes(spaceing=10):  
     for i in range(len(all_songs)): #use the filtered one
         image,_,songname, _ = all_songs[i]
         songframe = ctk.CTkFrame(root,width=300,height=40,border_width=2,corner_radius=0)
@@ -642,27 +704,31 @@ def create_songframes(spaceing=10):
         #UI BUTTON ANIMATIONS
         songlabel.bind("<Button-1>", lambda event, idx=i: bind_songframe_button_thing(idx))
         bg.bind("<Button-1>", lambda event, idx=i: bind_songframe_button_thing(idx))
+    if GLOBAL_MUSIC_DIR != BASE_DIR: # if its changed   oommgg this is SOOO mUCH BETTER then the last one
 
+        add_gdirnames = GLOBAL_MUSIC_DIR.split("/")
+        short_gdirname = ".../"+add_gdirnames[len(add_gdirnames)-2] +" / "+ add_gdirnames[len(add_gdirnames)-1]
+        #since this will only appear if they are in a upper direcotry we dont gotta worry about indexes
 
-    if GLOBAL_MUSIC_DIR != "music": # if its changed
-        songframe = ctk.CTkFrame(root,width=300,height=40,border_width=2,corner_radius=0)
+        dirname_label = ctk.CTkLabel(root,text=short_gdirname+"     ",width=300,height=40,corner_radius=0) # I CANNOT JUSTIFY THIS FOR THE LIFE OF ME SOMEONE PLEASE HELP WHAT IS GOING ON
 
-        btn = ctk.CTkFrame(songframe, width=300, height=40, fg_color="transparent")
-        btn.pack()
+        back_frame = ctk.CTkFrame(root,width=300,height=40,border_width=2,corner_radius=0)
+        back_frame.pack_propagate(False)
 
-        bg = ctk.CTkLabel(btn, text="")
+        bg = ctk.CTkLabel(back_frame, text="")
         bg.place(relwidth=1, relheight=1)
 
-        songlabel = ctk.CTkLabel(btn, text=" << Back", font=("Arial", 20, "bold"))
+        songlabel = ctk.CTkLabel(back_frame, text=" << Back", font=("Arial", 20, "bold"))
         songlabel.place(relx=0.5, rely=0.5, anchor="center")
 
-        songframe.pack_propagate(False)
-
-        song_frames.append(songframe)
+        song_frames.append(back_frame)
+        song_frames.append(dirname_label)
         
         #UI BUTTON ANIMATIONS
         songlabel.bind("<Button-1>", lambda event, idx="back": bind_songframe_button_thing(idx))
         bg.bind("<Button-1>", lambda event, idx="back": bind_songframe_button_thing(idx))
+
+   
 
 def get_average_color(img: Image.Image):
     small = img.resize((1, 1), Image.Resampling.LANCZOS)
@@ -684,7 +750,8 @@ def update_songframes(spaceing=15):
                 songframe.place(relx=relative_x, relwidth=0.4, rely=relative_y,x=playing_xoffset)
             else:
                 songframe.place(relx=relative_x, relwidth=0.4, rely=relative_y,x=0)
-
+        else:
+            songframe.place_forget()
     
 def rgb_to_hex(rgb):
     r, g, b, _ = rgb
@@ -749,7 +816,7 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
             if after_song_mode.get() == "Next":
                 skip_next_song()
 
-    distance = FOCUS_INDEX - RENDER_INDEX - 3
+    distance = FOCUS_INDEX - RENDER_INDEX - 4
     RENDER_INDEX += (distance / 8)
 
     if root.state() == "normal" and root.focus_get() != None:
@@ -757,8 +824,21 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
     root.after(16,interpolate_render_index)
 
 
+def keyrelease(event):
+    print(event.keysym)
+    key = event.keysym
+
+    if key == "BackSpace" and GLOBAL_MUSIC_DIR != BASE_DIR:
+        bind_songframe_button_thing("back")
+    
+    if key == "Up":
+        skip_backwards_song()
+    if key == "Down":
+        skip_next_song()
+
 root.iconbitmap(resource_path("assets/placeify.ico"))
 root.bind("<MouseWheel>",scroll_wheel)
+root.bind("<KeyRelease>",keyrelease)
 
 root.after(0,create_songframes)
 root.after(1,interpolate_render_index)
