@@ -59,10 +59,9 @@ You **NEEEEEED** **FFMPEG** AND **FFPROBE** IN YOUR LOCAL DIRECTORY.
 
 You can find it here: 
 
-[https://www.gyan.dev/ffmpeg/builds/](https://github.com/GyanD/codexffmpeg/releases/tag/6.0)
+https://github.com/GyanD/codexffmpeg/releases
 
-Look for:
-ffmpeg-6.0-**essentials_build**.7z
+Look for the latest build
 
 -------------------------------------------------------------------------------
 📜**LICENSE**
