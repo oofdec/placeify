@@ -57,7 +57,12 @@ Once installed simply, run:
 
 You **NEEEEEED** **FFMPEG** AND **FFPROBE** IN YOUR LOCAL DIRECTORY.
 
-You can find it here: `https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-essentials.7z`
+You can find it here: 
+
+https://www.gyan.dev/ffmpeg/builds/
+
+Look for:
+ffmpeg-git-**essentials**.7z
 
 -------------------------------------------------------------------------------
 📜**LICENSE**
