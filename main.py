@@ -1,5 +1,4 @@
-#HEY!  release 5 is OUT!
-
+from email.policy import default
 import math
 import time
 import customtkinter as ctk
@@ -15,8 +14,11 @@ from pypresence import Presence
 import pywinstyles
 import random
 import asyncio
+import json
 
 
+default_settings = {"scroll_speed":0.08,
+                    "blur_amount":0.25}
 
 def find_best_music_dir(): # this is so stable trust bro trust
     appdata_path = os.getenv('APPDATA')
@@ -25,6 +27,10 @@ def find_best_music_dir(): # this is so stable trust bro trust
     musiclocation_path = os.path.join(appdata_path,"placeify","musicdir") # should contain path to music folder
     music_dir_path = ""
     # check for existsing path
+    if not os.path.exists(os.path.join(placeify_path,"settings.json")):
+            with open(os.path.join(placeify_path,"settings.json"),"w") as f:
+                f.write(json.dumps(default_settings))
+
 
     if os.path.exists(musiclocation_path): #if location file exists, check if the location is valid. if so, return it.
         with open(musiclocation_path, "r") as f:
@@ -39,6 +45,10 @@ def find_best_music_dir(): # this is so stable trust bro trust
 
         if not os.path.exists(os.path.join(placeify_path,"music")):
             os.mkdir(os.path.join(placeify_path,"music"))
+
+        if not os.path.exists(os.path.join(placeify_path,"settings.json")):
+            with open(os.path.join(placeify_path,"settings.json"),"w") as f:
+                f.write("what")
 
         if not os.path.exists(musiclocation_path):
             with open(musiclocation_path,"w") as f:
@@ -71,10 +81,17 @@ def update_presence(state, details):
                 state=state,
                 details=details,
                 large_image="main",
-                large_text="large text"
+                large_text="LARGE TEXT"
             )
         except:
             pass
+
+def truncate_string(text, limit = 125):
+    if len(text) <= limit:
+        return text
+    
+    return text[:limit] + ("..." if limit > 3 else "")
+
 
 def connect_presence():
     global failed_presense, rpc_loop
@@ -85,8 +102,8 @@ def connect_presence():
 
         rpc.connect()
         rpc.update(
-            state="song name here",
-            details="vibing to",
+            state="in the menus",
+            details="chooseing a song",
             large_image="main",
             large_text="large text"
         )
@@ -99,8 +116,6 @@ def connect_presence():
 
 if USE_DISCORD_RICHPRECENSE:
     threading.Thread(target=connect_presence, daemon=True).start()
-
-#threading.Thread(target=update_presence,args=("vibing to","details text")).start()
 
 
 #ORGANIZE!
@@ -174,10 +189,6 @@ def compile_music_cache():
 compile_music_cache()
 
 
-#deprecated  dont use that
-#image, sound = safeload_song("song.mp3")
-
-
 def cubic_bounce(start, end, t):
     # clamp t to [0, 1]
     if t < 0: t = 0
@@ -246,25 +257,10 @@ global_x_offset = 0 # applys to all widgets for switching diretorys
 
 seek_offset = 0      # position (seconds) within the track where playback last started/resumed
 play_start_time = 0  # time.time() when playback last started/resumed
-#-----------------------------------------------------------------------
-#UI ELEMENTS-----------------------------------------------------------------------
-#-----------------------------------------------------------------------
-bgimage = ctk.CTkImage(Image.new("RGB",size=(1,1)),size=(1,1))
-bglabel = ctk.CTkLabel(root,image=bgimage,text="")
-bglabel.place(relwidth=1,relheight=1,x=0,y=0)
 
-bottom_options_bar = ctk.CTkFrame(root,width=300,height=35,border_width=2,bg_color="#474747")
-bottom_options_bar.place(relx=-0.02,rely=0.86)
-
-bottom_timeline_bar = ctk.CTkFrame(root,width=400,height=35,border_width=2,bg_color="#474747")
-bottom_timeline_bar.place(relx=-0.02,rely=0.93)
-
-song_title_text = ctk.CTkLabel(root,font=("ariel",35,"bold"),text="",corner_radius=5)
-song_title_text.place(relx=0.01,rely=0.01)
-
-song_creator_text = ctk.CTkLabel(root,font=("ariel",19,"bold"),text="",corner_radius=5)
-song_creator_text.place(relx=0.01,rely=0.11)
-
+#--------------------------------------------------------------------------------
+#FUNCTIONS ----------------------------------------------------------------------
+#--------------------------------------------------------------------------------
 
 def get_current_track_pos():
     """Current position in the track, in seconds. Safe to call whether playing or paused."""
@@ -285,21 +281,18 @@ def manage_pause(customstate=None):
         # fold whatever time has passed since the last play/resume into seek_offset,
         # so we "freeze" the exact position instead of losing track of it
 
+        #yeah whatever you say anthropic
+
         seek_offset = get_current_track_pos()
         mixer.music.pause()
-        threading.Thread(target=update_presence,args=(str(CURRENT_TRACKDATA[2]).replace(".mp3",""),"(paused) vibing to:")).start()
         pause_butt.configure(text="▶️")
     else:
         mixer.music.play(start=seek_offset)
         play_start_time = time.time()
-        threading.Thread(target=update_presence,args=(str(CURRENT_TRACKDATA[2]).replace(".mp3",""),"vibing to:")).start()
         pause_butt.configure(text="⏸️")
 
     pause_state.set(current_state)
 
-
-pause_butt = ctk.CTkButton(bottom_timeline_bar,text="▶️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=manage_pause)
-pause_butt.place(relx=0.04,rely=0.05)
 
 def skip_next_song():
     global PLAYING_INDEX
@@ -315,8 +308,6 @@ def skip_next_song():
             select_song(PLAYING_INDEX)
             apply_playoffset_tween()
 
-seek_next_song_butt = ctk.CTkButton(bottom_options_bar,text="➡️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=skip_next_song)
-seek_next_song_butt.place(relx=0.25,rely=0.05)
 
 def skip_backwards_song():
     global PLAYING_INDEX
@@ -332,8 +323,7 @@ def skip_backwards_song():
             select_song(PLAYING_INDEX)
             apply_playoffset_tween()
 
-seek_next_song_butt = ctk.CTkButton(bottom_options_bar,text="⬅️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=skip_backwards_song)
-seek_next_song_butt.place(relx=0.17,rely=0.05)
+
 
 def find_random_valid_song_in_dir():
     song_exists_number = 0 
@@ -356,6 +346,11 @@ def find_random_valid_song_in_dir():
     return None
 
 
+def restart_current_song():
+    if CURRENT_TRACKDATA != ():
+        select_song(songdir=CURRENT_TRACKDATA[1])
+
+
 def random_song():
     global PLAYING_INDEX
     global FOCUS_INDEX
@@ -370,60 +365,177 @@ def random_song():
         select_song(random_song)
         apply_playoffset_tween()
 
-#random_song_butt_image = ctk.CTkImage(Image.open(resource_path("assets/shuffle.png")))
 
-random_song_butt = ctk.CTkButton(bottom_options_bar,text="🔀",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=random_song,font=("ariel",15,"bold"))
-random_song_butt.place(relx=0.35,rely=0.045)
-
-
-#rename_song_butt = ctk.CTkButton(bottom_options_bar,text="✏️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=random_song,font=("ariel",15,"bold"))
-#rename_song_butt.place(relx=0.55,rely=0.045)
 
 def seek_pos(event):
-    global seek_offset
+    if CURRENT_TRACKDATA != (): #make sure that there is even a song loaded
+        global seek_offset
 
-    manage_pause(True) # pause while scrubbing so nothing else fights over seek_offset 
-    current_s = get_current_track_pos()
+        manage_pause(True) # pause while scrubbing so nothing else fights over seek_offset 
+        current_s = get_current_track_pos()
 
-    if current_music_lenght > 0:
-        seek_offset = timeline_slider.get() * (current_music_lenght / 1000)
-        slider_value = current_s / (current_music_lenght / 1000)
-        slider_value = max(0, min(1, slider_value)) # clamp so it can't run past the end of the track
+        if current_music_lenght > 0:
+            seek_offset = timeline_slider.get() * (current_music_lenght / 1000)
+            slider_value = current_s / (current_music_lenght / 1000)
+            slider_value = max(0, min(1, slider_value)) # clamp so it can't run past the end of the track
 
-        timelime_label.configure(text=f"{calulate_seconds_strtime(current_s)} / {calulate_seconds_strtime(current_music_lenght//1000)}")
+            timelime_label.configure(text=f"{calulate_seconds_strtime(current_s)} / {calulate_seconds_strtime(current_music_lenght//1000)}")
+
+#--------------------------------------------------------------------------------
+#UI FUNCTIONS -------------------------------------------------------------------
+#--------------------------------------------------------------------------------
+def show_settings_menu():
+    settmenu.place(relwidth=1,relheight=1)
+    bg_frame.place(relwidth=1,relheight=1)
+    close_settings_menu.place(relx=0.95,rely=0.01)
+
+    bg_frame.lift()
+    settmenu.lift()
+    close_settings_menu.lift()
+
+def close_focus_menus():
+    bg_frame.place_forget()
+
+    musicmenu.place_forget()
+    dirmenu.place_forget()
+
+    settmenu.place_forget()
+    close_settings_menu.place_forget()
+
+def close_settings_menu():
+    settings_save = {
+        "scroll_speed":scroll_speed_slider.get(),
+        "blur_amount": bg_blur_slider.get()
+        }
+
+    try:
+        with open(settings_path, "w") as f:
+            f.write(json.dumps(settings_save))
+        print("settings saved successfully!")
+    except Exception as e:
+        print("uh oh, couldnt save settings bc "+str(e))
+    finally: #fun fact, this is actaully the first time ive used finally, lowk looks really cool 👍
+        close_focus_menus()
+
+#-----------------------------------------------------------------------
+#UI ELEMENTS-----------------------------------------------------------------------
+#-----------------------------------------------------------------------
+bgimage = ctk.CTkImage(Image.new("RGB",size=(1,1)),size=(1,1))
+bglabel = ctk.CTkLabel(root,image=bgimage,text="")
+bglabel.place(relwidth=1,relheight=1,x=0,y=0)
+
+bottom_options_bar = ctk.CTkFrame(root,width=300,height=35,border_width=2,bg_color="#474747")
+bottom_options_bar.place(relx=-0.02,rely=0.86)
+
+bottom_timeline_bar = ctk.CTkFrame(root,width=400,height=35,border_width=2,bg_color="#474747")
+bottom_timeline_bar.place(relx=-0.02,rely=0.93)
+
+song_title_text = ctk.CTkLabel(root,font=("ariel",35,"bold"),text="",corner_radius=5)
+song_title_text.place(relx=0.01,rely=0.01)
+
+song_creator_text = ctk.CTkLabel(root,font=("ariel",19,"bold"),text="",corner_radius=5)
+song_creator_text.place(relx=0.01,rely=0.11)
+
+###---------------------------------------------------------------------------------
+###BOTTOM OPTIONS BAR:  ------------------------------------------------------------------------
+
+seek_previous_song_image = ctk.CTkImage(Image.open(resource_path("assets/previous_focus.png")), size=(14,14))
+seek_previous_song_butt = ctk.CTkButton(bottom_options_bar,text="",image=seek_previous_song_image,fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=skip_backwards_song)
+seek_previous_song_butt.place(relx=0.17,rely=0.05)
+
+seek_next_song_image = ctk.CTkImage(Image.open(resource_path("assets/next_focus.png")), size=(14,14))
+seek_next_song_butt = ctk.CTkButton(bottom_options_bar,text="",image=seek_next_song_image,fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=skip_next_song)
+seek_next_song_butt.place(relx=0.26,rely=0.05)
+
+random_song_butt_image = ctk.CTkImage(Image.open(resource_path("assets/shuffle v2.png")), size=(14,14))
+random_song_butt = ctk.CTkButton(bottom_options_bar,text="",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=random_song,image=random_song_butt_image)
+random_song_butt.place(relx=0.35,rely=0.05)
+
+restart_song_image = ctk.CTkImage(Image.open(resource_path("assets/restart.png")), size=(14,14))
+restart_song_button = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",text="",hover_color="#1a1a1a",image=restart_song_image,width=5,command=restart_current_song)
+restart_song_button.place(relx=0.45,rely=0.05)
+
+settings_button = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="⚙️",width=25,command=show_settings_menu,height=15,font=("ariel",15,"bold"))
+settings_button.place(relx=0.59,rely=0.05)
+
+after_song_mode = ctk.CTkOptionMenu(bottom_options_bar,values=("Shuffle","Loop","Next","Wait"),fg_color="#1a1a1a",dropdown_fg_color="#1a1a1a",button_color="#1a1a1a",button_hover_color="#333333")
+after_song_mode.place(relx=0.7,relwidth=0.29,rely=0.09,relheight=0.67)
+
+###---------------------------------------------------------------------------------
+###BOTTOM TIMELINE BAR---------------------------------------------------------------------------------
+
+pause_butt = ctk.CTkButton(bottom_timeline_bar,text="▶️",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=manage_pause)
+pause_butt.place(relx=0.04,rely=0.05)
 
 timeline_slider = ctk.CTkSlider(bottom_timeline_bar,command=seek_pos)
 timeline_slider.place(relx=0.1,rely=0.2,relwidth=0.7)
+timeline_slider.set(0)
 
 timelime_label = ctk.CTkLabel(bottom_timeline_bar,fg_color="transparent",text="")
 timelime_label.place(relx=0.79,rely=0.05,relwidth=0.2)
-
 timeline_slider.lift()
 
+###---------------------------------------------------------------------------------
+###SETTINGS MENU---------------------------------------------------------------------------------
+appdata_path = os.getenv('APPDATA')
+placeify_path = os.path.join(appdata_path,"placeify")
+settings_path = os.path.join(placeify_path,"settings.json")
+
+with open(settings_path,"r") as f:
+    saved_settings = json.loads(f.read())
+
+def update_scrollspeed_text(event=None):
+    scroll_speed_title.configure(text=f"Scroll Interpolation: {round(scroll_speed_slider.get()*100)}")
+def update_bluramount_text(event=None):
+    bg_blur_title.configure(text=f"BG Blur Amount: {round(bg_blur_slider.get()*100)}")
+
+settmenu = ctk.CTkScrollableFrame(root,border_width=2)
+
+setting_title = ctk.CTkLabel(settmenu,text="Settings",font=("aeril",28,"bold"))
+setting_title.pack(anchor="w")
+
+setting_title = ctk.CTkLabel(settmenu,text="Visibility and UI",font=("aeril",28,"normal"))
+setting_title.pack(anchor="w",pady=(25,9))
+
+scroll_speed_title = ctk.CTkLabel(settmenu,text=f"Scroll Interpolation: {8}",font=("aeril",19,"normal"))
+scroll_speed_title.pack(anchor="w")
+
+scroll_speed_slider = ctk.CTkSlider(settmenu,width=600,command=update_scrollspeed_text,from_=0, to=0.20)
+scroll_speed_slider.pack(anchor="w")
+scroll_speed_slider.set(saved_settings["scroll_speed"])
+
+bg_blur_title = ctk.CTkLabel(settmenu,text=f"BG Blur Amount: {25}",font=("aeril",19,"normal"))
+bg_blur_title.pack(anchor="w")
+
+bg_blur_slider = ctk.CTkSlider(settmenu,width=600,command=update_bluramount_text,from_=0.01, to=0.35)
+bg_blur_slider.pack(anchor="w")
+bg_blur_slider.set(saved_settings["blur_amount"])
+
+update_bluramount_text()
+update_scrollspeed_text()
+
+close_settings_menu = ctk.CTkButton(root,text="❌",fg_color="black",hover_color="grey",width=20,command=close_settings_menu)
+
+###---------------------------------------------------------------------------------
+###GENERAL FOCUS MENUS --------------------------------------------------------
 bg_frame = ctk.CTkFrame(root,fg_color="black")
 pywinstyles.set_opacity(bg_frame, value=0.8)
 
-def import_menu_close():
-    bg_frame.place_forget()
-    musicmenu.place_forget()
-    dirmenu.place_forget()
-    settmenu.place_forget()
-
-close = ctk.CTkButton(bg_frame,text="❌",fg_color="black",hover_color="grey",width=20,command=import_menu_close)
+close = ctk.CTkButton(bg_frame,text="❌",fg_color="black",hover_color="grey",width=20,command=close_focus_menus)
 close.place(relx=0.95,rely=0.01)
 
+###---------------------------------------------------------------------------------
+### ADD DATA MENU ----------------------------------------------------------
 musicmenu = ctk.CTkFrame(root,border_width=2)
 
-
-#IMPORT FROM YT MENU
-yt_menu = ctk.CTkFrame(musicmenu,border_width=2)
+yt_menu = ctk.CTkFrame(musicmenu,border_width=2,bg_color="#474747")
 yt_menu.place(relx=0,rely=0.18,relwidth=1,relheight=0.82)
 
 yt_url_title = ctk.CTkLabel(yt_menu,text="YouTube URL")
 yt_url_title.place(relx=0.05,rely=0.05)
 
 yt_url_entry = ctk.CTkEntry(yt_menu)
-yt_url_entry.place(relx=0.05,rely=0.15,relwidth=0.88)
+yt_url_entry.place(relx=0.05,rely=0.15,relwidth=0.88) 
 
 yt_instructions = ctk.CTkLabel(yt_menu,text=f"""Paste your video link here.\n\n\nThis will be added to:""",
     justify="left",
@@ -434,6 +546,12 @@ location_entry = ctk.CTkEntry(yt_menu)
 location_entry.place(relx=0.05,rely=0.58,relwidth=0.9)
 location_entry.insert(ctk.END,f"/{GLOBAL_MUSIC_DIR}")
 location_entry.configure(state="disabled")
+
+def open_appdata_song_dir():
+    os.startfile(GLOBAL_MUSIC_DIR)
+
+song_output_portal = ctk.CTkButton(location_entry,text="📂",width=15,border_width=2,border_color="#565B5E",fg_color="#343638",hover_color="#1a1a1a",bg_color="#565B5E",command=open_appdata_song_dir)
+song_output_portal.place(relx=0.95,rely=0)
 
 import_status = ctk.CTkLabel(yt_menu,text="",text_color="red")
 import_status.place(relx=0.1,rely=0.85)
@@ -456,7 +574,7 @@ def safe_import_yturl():
             song_frames.clear()
 
             root.after(0,create_songframes)
-            import_menu_close()
+            close_focus_menus()
         except:
             import_status.configure(text="Somthing went wrong. Please check that the URL is correct.",text_color="red")
         
@@ -501,7 +619,7 @@ volume_slider.set(0.2)
 set_volume_slider()
 
 add_music_butt = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="➕",width=25,command=add_music_menu)
-add_music_butt.place(relx=0.07,rely=0.05)
+add_music_butt.place(relx=0.037,rely=0.05)
 
 #ADD DIRECTORY
 
@@ -532,7 +650,7 @@ def create_dir():
 
         root.after(0,create_songframes)
 
-        import_menu_close()
+        close_focus_menus()
     except:
         dir_status.configure(text="An error occured. Please make sure that the \n name is avalable")
 
@@ -552,34 +670,6 @@ import_dir_button.place(relx=0.72,rely=0.85)
 
 dir_menu_butt = ctk.CTkButton(musicmenu,text="Create Directory",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",font=("areil",18,"bold"),command=add_directory_menu)
 dir_menu_butt.place(relx=0.68,rely=0.05)
-
-
-previouse_dir_button =  ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="⏪",width=25,command=lambda: select_song(songdir=CURRENT_TRACKDATA[1]),height=15,font=("ariel",15,"bold"))
-previouse_dir_button.place(relx=0.45,rely=0.05)
-
-#####################################
-#SETTINGS MENU#######################
-#####################################
-def settings_menu():
-    bg_frame.place(relwidth=1,relheight=1)
-    settmenu.place(relx=0.1,relwidth=0.8,
-                rely=0.1,relheight=0.8)
-
-
-    bg_frame.lift()
-    settmenu.lift()
-
-
-settmenu = ctk.CTkScrollableFrame(root,border_width=2)
-
-setttitle = ctk.CTkLabel(settmenu,text="Settings",font=("aeril",28,"bold"))
-setttitle.place(x=5,y=5)
-
-settings_button = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="⚙️",width=25,command=settings_menu,height=15,font=("ariel",15,"bold"))
-settings_button.place(relx=0.59,rely=0.05)
-
-after_song_mode = ctk.CTkOptionMenu(bottom_options_bar,values=("Wait","Shuffle","Next","Loop"),fg_color="#1a1a1a",dropdown_fg_color="#1a1a1a",button_color="#1a1a1a",button_hover_color="#333333")
-after_song_mode.place(relx=0.7,relwidth=0.29,rely=0.09,relheight=0.67)
 
 def apply_playoffset_tween(time=0):
     global playing_xoffset
@@ -613,7 +703,14 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
     song_title_text.configure(text=os.path.basename(name).replace(".mp3",""))
     song_creator_text.configure(text=uploader)
 
-    threading.Thread(target=update_presence,args=(name.replace(".mp3",""),"vibing to:")).start()
+    all_gdirnames = GLOBAL_MUSIC_DIR.replace('\\',"/").split("/")
+    gdirlen = len(all_gdirnames)
+
+    short_gdirname = f"{all_gdirnames[gdirlen-1]}"
+
+    details = truncate_string(f"{short_gdirname} / {name.replace(".mp3","")} ({uploader})")
+
+    threading.Thread(target=update_presence,args=(details,"vibing to:")).start()
 
     width, height = image.size
 
@@ -626,7 +723,7 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
     new_width = int(width * scale)
     new_height = int(height * scale)
 
-    image = image.resize((new_width//25, new_height//25), Image.Resampling.LANCZOS)
+    image = image.resize((new_width//round(bg_blur_slider.get()*100), new_height//round(bg_blur_slider.get()*100)), Image.Resampling.LANCZOS)
 
     image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     bgimage = ctk.CTkImage(image, size=(new_width, new_height))
@@ -706,8 +803,10 @@ def create_songframes(spaceing=10):
         bg.bind("<Button-1>", lambda event, idx=i: bind_songframe_button_thing(idx))
     if GLOBAL_MUSIC_DIR != BASE_DIR: # if its changed   oommgg this is SOOO mUCH BETTER then the last one
 
-        add_gdirnames = GLOBAL_MUSIC_DIR.split("/")
-        short_gdirname = ".../"+add_gdirnames[len(add_gdirnames)-2] +" / "+ add_gdirnames[len(add_gdirnames)-1]
+        all_gdirnames = GLOBAL_MUSIC_DIR.replace('\\',"/").split("/")
+        gdirlen = len(all_gdirnames)
+
+        short_gdirname = f".../{all_gdirnames[gdirlen-2]} / {all_gdirnames[gdirlen-1]}"
         #since this will only appear if they are in a upper direcotry we dont gotta worry about indexes
 
         dirname_label = ctk.CTkLabel(root,text=short_gdirname+"     ",width=300,height=40,corner_radius=0) # I CANNOT JUSTIFY THIS FOR THE LIFE OF ME SOMEONE PLEASE HELP WHAT IS GOING ON
@@ -817,8 +916,8 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
                 skip_next_song()
 
     distance = FOCUS_INDEX - RENDER_INDEX - 4
-    RENDER_INDEX += (distance / 8)
-
+    RENDER_INDEX += (distance / max(1,round(scroll_speed_slider.get()*100)))
+    
     if root.state() == "normal" and root.focus_get() != None:
         root.after(0,update_songframes)
     root.after(16,interpolate_render_index)
@@ -843,6 +942,8 @@ root.bind("<KeyRelease>",keyrelease)
 root.after(0,create_songframes)
 root.after(1,interpolate_render_index)
 root.mainloop()
+
+#once the window is closed
 
 try:
     rpc_loop.call_soon_threadsafe(rpc_loop.stop)
