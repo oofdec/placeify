@@ -1,4 +1,3 @@
-from email.policy import default
 import math
 import time
 import customtkinter as ctk
