@@ -14,48 +14,41 @@ import pywinstyles
 import random
 import asyncio
 import json
+import ctypes
+
 
 
 default_settings = {"scroll_speed":0.08,
-                    "blur_amount":0.25}
+                    "blur_amount":0.25,
+                    "use_disc":True}
+
+def safe_mkdir(dirname):
+    if not os.path.exists(dirname):
+        os.mkdir(dirname)
+        print(f"✅path {dirname} created")
+    else:
+        print(f"ℹ️path {dirname} already exists")
 
 def find_best_music_dir(): # this is so stable trust bro trust
     appdata_path = os.getenv('APPDATA')
 
     placeify_path = os.path.join(appdata_path,"placeify")
-    musiclocation_path = os.path.join(appdata_path,"placeify","musicdir") # should contain path to music folder
-    music_dir_path = ""
-    # check for existsing path
-    if not os.path.exists(os.path.join(placeify_path,"settings.json")):
-            with open(os.path.join(placeify_path,"settings.json"),"w") as f:
-                f.write(json.dumps(default_settings))
+    music_path = os.path.join(appdata_path,"placeify","music")
+    setting_path = os.path.join(appdata_path,"placeify","settings.json")
+    
+    # step 1.         create all directorys
+    safe_mkdir(placeify_path)
+    safe_mkdir(music_path)
 
+    if not os.path.exists(setting_path):
+        with open(setting_path,"w") as f:
+            f.write(json.dumps(default_settings))
+        print("✅settings.json created")
+    else:
+        print("ℹ️settings.json already exists")
+    
+    return music_path
 
-    if os.path.exists(musiclocation_path): #if location file exists, check if the location is valid. if so, return it.
-        with open(musiclocation_path, "r") as f:
-            music_dir_path = f.read()
-            if not os.path.exists(music_dir_path):
-                os.mkdir(os.path.join(placeify_path,"music"))
-            return music_dir_path
- 
-    else: # if locationfile dosnt exist
-        if not os.path.exists(placeify_path):
-            os.mkdir(placeify_path)
-
-        if not os.path.exists(os.path.join(placeify_path,"music")):
-            os.mkdir(os.path.join(placeify_path,"music"))
-
-        if not os.path.exists(os.path.join(placeify_path,"settings.json")):
-            with open(os.path.join(placeify_path,"settings.json"),"w") as f:
-                f.write("what")
-
-        if not os.path.exists(musiclocation_path):
-            with open(musiclocation_path,"w") as f:
-                f.write(os.path.join(placeify_path,"music"))
-                return os.path.join(placeify_path,"music")
-        else:
-            with open(musiclocation_path,"r") as f:
-                return f.read()
 
 
 def resource_path(relative_path):
@@ -66,15 +59,15 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
+def get_ffmpeg_path():
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, "ffmpeg", "ffmpeg.exe")
+    else:
+        return os.path.join("ffmpeg", "ffmpeg.exe")
 
-USE_DISCORD_RICHPRECENSE = True
-CLIENT_ID = "1532524855130587216"
-rpc = Presence(CLIENT_ID)
-
-failed_presense = False
 
 def update_presence(state, details):
-    if not failed_presense and USE_DISCORD_RICHPRECENSE:
+    if not failed_presense and saved_settings["use_disc"]:
         try:
             rpc.update(
                 state=state,
@@ -91,37 +84,30 @@ def truncate_string(text, limit = 125):
     
     return text[:limit] + ("..." if limit > 3 else "")
 
-
 def connect_presence():
-    global failed_presense, rpc_loop
+    if safe_settings_grab("use_disc"):
+        global failed_presense, rpc_loop
 
-    try:
-        rpc_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(rpc_loop)
+        try:
+            rpc_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(rpc_loop)
 
-        rpc.connect()
-        rpc.update(
-            state="in the menus",
-            details="chooseing a song",
-            large_image="main",
-            large_text="large text"
-        )
+            rpc.connect()
+            rpc.update(
+                state="in the menus",
+                details="chooseing a song",
+                large_image="main",
+                large_text="large text"
+            )
 
-        failed_presense = False
-    except Exception as e:
-        print("Presence failed:", e)
-        failed_presense = True
-
-
-if USE_DISCORD_RICHPRECENSE:
-    threading.Thread(target=connect_presence, daemon=True).start()
+            failed_presense = False
+        except Exception as e:
+            print("Presence failed:", e)
+            failed_presense = True
 
 
 #ORGANIZE!
 #add post image grabbing que
-
-
-mixer.init()
 
 
 #-----------------------------------------------------------------------------------------------------------
@@ -165,12 +151,36 @@ def safeload_song(name, usedir=False):
     return image, songpath, name, uploader
 
 
-GLOBAL_MUSIC_DIR = find_best_music_dir()
-BASE_DIR = GLOBAL_MUSIC_DIR
-print("GLOBAL DIR: "+GLOBAL_MUSIC_DIR)
+def critical_error_report(title,msg):
+    print("\n--err report------------------------------------------------------------")
+    print(f"""❌CRITICAL ERROR: {title} 
+        What happened? :
+            {msg}
+
+            Please update your installation of placeify, and if this keeps happening, pleasee let me know under the comments of the github page.""")
+    print("--------------------------------------------------------------\n")
+
+
+def safe_settings_grab(name):
+    if name in saved_settings:
+        print(f"✅recall setting name {name}")
+        return saved_settings[name]
+    else:
+        if name in default_settings:
+            print(f"⚠️outdated save for '{name}', returning current default '{default_settings[name]}'")
+            return default_settings[name]
+        else:
+            critical_error_report(
+                title=f"no save was found for the name '{name}' under the dircetory or defaults.",
+
+                msg=f"""there was no found attribute for a setting called '{name}' anywhere. 
+
+                    This could happen from a outdated version that dose not support a default for this setting yet, or
+                    a setting that name has been changed. This could also be an issue on our part. """
+                    )
+
 
 all_songs = []
-
 def compile_music_cache():
     music_dir = os.listdir(GLOBAL_MUSIC_DIR)
 
@@ -183,9 +193,36 @@ def compile_music_cache():
         if ext == "":
             all_songs.append((Image.new("RGBA",size=(1,1)),None,songname,""))
 
-
-
+# BASE INITS---MUSIC DIRS------------------
+GLOBAL_MUSIC_DIR = find_best_music_dir()
+BASE_DIR = GLOBAL_MUSIC_DIR
 compile_music_cache()
+
+mixer.init()
+
+#SETTINGS RECALL------------------------------
+appdata_path = os.getenv('APPDATA')
+placeify_path = os.path.join(appdata_path,"placeify")
+settings_path = os.path.join(placeify_path,"settings.json")
+with open(settings_path,"r") as f:
+    try:
+        saved_settings = json.loads(f.read())
+    except:
+        print("⚠️ settings courrupted - could not read setting json. restoring defaults")
+        saved_settings = default_settings #fallback if courrupted settings
+
+        with open(settings_path, "w") as f:
+            f.write(json.dumps(saved_settings))
+        print("   └ ℹ️default settings restored.")
+print("GLOBAL DIR: "+GLOBAL_MUSIC_DIR)
+
+#DISCORD------------------
+CLIENT_ID = "1532524855130587216"
+rpc = Presence(CLIENT_ID)
+failed_presense = False
+threading.Thread(target=connect_presence, daemon=True).start()
+
+
 
 
 def cubic_bounce(start, end, t):
@@ -203,10 +240,12 @@ def cubic_bounce(start, end, t):
     return start + (end - start) * (base + bounce)
 
 
-def download_youtube(url):
 
+ffmpeg_path = get_ffmpeg_path()
+def download_youtube(url):
     ydl_opts = {
         'format': 'bestaudio/best',
+        'ffmpeg_location': ffmpeg_path,   # FINALLYYYYYYY 
         'outtmpl': f'{GLOBAL_MUSIC_DIR+"/"}%(title)s.%(ext)s',   # auto name file as the video title
         'writethumbnail': True,
         'postprocessors': [
@@ -260,7 +299,6 @@ play_start_time = 0  # time.time() when playback last started/resumed
 #--------------------------------------------------------------------------------
 #FUNCTIONS ----------------------------------------------------------------------
 #--------------------------------------------------------------------------------
-
 def get_current_track_pos():
     """Current position in the track, in seconds. Safe to call whether playing or paused."""
     if pause_state.get():
@@ -270,6 +308,9 @@ def get_current_track_pos():
 def manage_pause(customstate=None):
     global seek_offset
     global play_start_time
+
+    if CURRENT_TRACKDATA == (): # no track loaded
+        return
 
     if customstate == None:
         current_state = not(pause_state.get())
@@ -386,11 +427,11 @@ def seek_pos(event):
 def show_settings_menu():
     settmenu.place(relwidth=1,relheight=1)
     bg_frame.place(relwidth=1,relheight=1)
-    close_settings_menu.place(relx=0.95,rely=0.01)
+    close_settings_menu_butt.place(relx=0.935,rely=0.01)
 
     bg_frame.lift()
     settmenu.lift()
-    close_settings_menu.lift()
+    close_settings_menu_butt.lift()
 
 def close_focus_menus():
     bg_frame.place_forget()
@@ -399,22 +440,25 @@ def close_focus_menus():
     dirmenu.place_forget()
 
     settmenu.place_forget()
-    close_settings_menu.place_forget()
+    close_settings_menu_butt.place_forget()
 
-def close_settings_menu():
+def save_settings():
     settings_save = {
         "scroll_speed":scroll_speed_slider.get(),
-        "blur_amount": bg_blur_slider.get()
+        "blur_amount": bg_blur_slider.get(),
+        "use_disc":use_disc_check.get()
         }
 
     try:
         with open(settings_path, "w") as f:
             f.write(json.dumps(settings_save))
-        print("settings saved successfully!")
+        print("✅settings saved successfully!")
     except Exception as e:
-        print("uh oh, couldnt save settings bc "+str(e))
-    finally: #fun fact, this is actaully the first time ive used finally, lowk looks really cool 👍
-        close_focus_menus()
+        print("❌uh oh, couldnt save settings bc "+str(e))
+
+def close_settings_menu():
+    save_settings()
+    close_focus_menus()
 
 #-----------------------------------------------------------------------
 #UI ELEMENTS-----------------------------------------------------------------------
@@ -476,19 +520,12 @@ timeline_slider.lift()
 
 ###---------------------------------------------------------------------------------
 ###SETTINGS MENU---------------------------------------------------------------------------------
-appdata_path = os.getenv('APPDATA')
-placeify_path = os.path.join(appdata_path,"placeify")
-settings_path = os.path.join(placeify_path,"settings.json")
-
-with open(settings_path,"r") as f:
-    saved_settings = json.loads(f.read())
-
 def update_scrollspeed_text(event=None):
     scroll_speed_title.configure(text=f"Scroll Interpolation: {round(scroll_speed_slider.get()*100)}")
 def update_bluramount_text(event=None):
     bg_blur_title.configure(text=f"BG Blur Amount: {round(bg_blur_slider.get()*100)}")
 
-settmenu = ctk.CTkScrollableFrame(root,border_width=2)
+settmenu = ctk.CTkScrollableFrame(root,border_width=2,bg_color="#474747")
 
 setting_title = ctk.CTkLabel(settmenu,text="Settings",font=("aeril",28,"bold"))
 setting_title.pack(anchor="w")
@@ -501,19 +538,30 @@ scroll_speed_title.pack(anchor="w")
 
 scroll_speed_slider = ctk.CTkSlider(settmenu,width=600,command=update_scrollspeed_text,from_=0, to=0.20)
 scroll_speed_slider.pack(anchor="w")
-scroll_speed_slider.set(saved_settings["scroll_speed"])
+scroll_speed_slider.set(safe_settings_grab("scroll_speed"))
 
 bg_blur_title = ctk.CTkLabel(settmenu,text=f"BG Blur Amount: {25}",font=("aeril",19,"normal"))
 bg_blur_title.pack(anchor="w")
 
 bg_blur_slider = ctk.CTkSlider(settmenu,width=600,command=update_bluramount_text,from_=0.01, to=0.35)
 bg_blur_slider.pack(anchor="w")
-bg_blur_slider.set(saved_settings["blur_amount"])
+bg_blur_slider.set(safe_settings_grab("blur_amount"))
+
+
+setting_title = ctk.CTkLabel(settmenu,text="Privacy",font=("aeril",28,"normal"))
+setting_title.pack(anchor="w",pady=(25,9))
+
+use_disc_check = ctk.CTkCheckBox(settmenu,text=f"Use Discord Rich Presence",font=("aeril",19,"normal"))
+use_disc_check.pack(anchor="w")
+if safe_settings_grab("use_disc"):
+    use_disc_check.select()
+
+
 
 update_bluramount_text()
 update_scrollspeed_text()
 
-close_settings_menu = ctk.CTkButton(root,text="❌",fg_color="black",hover_color="grey",width=20,command=close_settings_menu)
+close_settings_menu_butt = ctk.CTkButton(root,text="❌",fg_color="#2B2B2B",hover_color="grey",bg_color="#2B2B2B",width=20,command=close_settings_menu)
 
 ###---------------------------------------------------------------------------------
 ###GENERAL FOCUS MENUS --------------------------------------------------------
@@ -915,12 +963,16 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
                 skip_next_song()
 
     distance = FOCUS_INDEX - RENDER_INDEX - 4
-    RENDER_INDEX += (distance / max(1,round(scroll_speed_slider.get()*100)))
+    RENDER_INDEX += (distance / max(1,scroll_speed_slider.get()*100))
     
     if root.state() == "normal" and root.focus_get() != None:
         root.after(0,update_songframes)
     root.after(16,interpolate_render_index)
 
+def show_console():
+    ctypes.windll.kernel32.AllocConsole()
+    sys.stdout = open("CONOUT$", "w")
+    sys.stderr = open("CONOUT$", "w")
 
 def keyrelease(event):
     print(event.keysym)
@@ -933,19 +985,26 @@ def keyrelease(event):
         skip_backwards_song()
     if key == "Down":
         skip_next_song()
+    if key == "7":
+        show_console()
 
+
+
+#------------------------------
+# UI INITS------------------------------
 root.iconbitmap(resource_path("assets/placeify.ico"))
 root.bind("<MouseWheel>",scroll_wheel)
 root.bind("<KeyRelease>",keyrelease)
 
 root.after(0,create_songframes)
 root.after(1,interpolate_render_index)
+
 root.mainloop()
 
-#once the window is closed
-
+#SHUTDOWN----------------------------
 try:
     rpc_loop.call_soon_threadsafe(rpc_loop.stop)
 except:
     pass
 mixer.music.stop()
+save_settings()
