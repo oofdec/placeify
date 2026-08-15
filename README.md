@@ -55,7 +55,7 @@ Once installed simply, run:
 
 **⚠️⚠️IMPORTANT⚠️⚠️**
 
-You **NEEEEEED** **FFMPEG** AND **FFPROBE** IN YOUR LOCAL DIRECTORY.
+You **NEEEEEED** **FFMPEG** IN YOUR LOCAL DIRECTORY.
 
 You can find it here: 
 
@@ -72,6 +72,7 @@ You can find that in the `LICENSE` file or in the "License" section on the repos
 -------------------------------------------------------------------------------
 🪳**BUGS AND ERRORS**
 
-Placeify is still pretty new, as I only started it about like a week ago. Although most bugs have been sorted out, there are still many chances that there are more to find. If you found any, please let me know!
+Although most bugs have been sorted out, there are still many chances that there are more to find. If you found any, please let me know!
+Or if anything looks off- press "7" and check the console. You might need to try and replicate the bug in order to find it again though...
 
 I also apologize in advance, I know that the engine is just 700 lines of spaghetti, and I don't know how to structure it and I WILL reformat it later I swear
