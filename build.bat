@@ -8,7 +8,6 @@ pyinstaller --onefile --noconsole ^
   --hidden-import=yt_dlp.postprocessor ^
   --hidden-import=yt_dlp.utils ^
   --add-binary "ffmpeg/ffmpeg.exe;ffmpeg" ^
-  --add-binary "ffmpeg/ffprobe.exe;ffmpeg" ^
   main.py
 
 echo build complete!
