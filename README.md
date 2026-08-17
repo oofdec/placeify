@@ -1,4 +1,3 @@
-![Project Logo](./assets/placeify.png)
 Placeify is an **lightweight**, open‑source music player that lets you import songs straight from YouTube using yt‑dlp, then listen offline with **zero ads**, **clean UI**, **thumbnails**, **playlists**, and more.
 
 Features:
@@ -77,3 +76,5 @@ Although most bugs have been sorted out, there are still many chances that there
 Or if anything looks off- press "7" and check the console. You might need to try and replicate the bug in order to find it again though...
 
 I also apologize in advance, I know that the engine is just 700 lines of spaghetti, and I don't know how to structure it and I WILL reformat it later I swear
+
+![Project Logo](./assets/placeify.png)
