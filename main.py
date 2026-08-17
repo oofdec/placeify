@@ -17,10 +17,12 @@ import json
 import ctypes
 
 
-
 default_settings = {"scroll_speed":0.08,
                     "blur_amount":0.25,
-                    "use_disc":True}
+                    "use_disc":True,
+                    "load_imgs":True,
+                    "img_que":True
+                    }
 
 def safe_mkdir(dirname):
     if not os.path.exists(dirname):
@@ -85,7 +87,7 @@ def truncate_string(text, limit = 125):
     return text[:limit] + ("..." if limit > 3 else "")
 
 def connect_presence():
-    if safe_settings_grab("use_disc"):
+    if safe_settings_grab("use_disc") == 1:
         global failed_presense, rpc_loop
 
         try:
@@ -119,6 +121,50 @@ def valid_audio_name(name):
         return False
 
 
+def load_image_thread():
+    global all_songs
+    
+    utilize_realtime_image_que = safe_settings_grab("img_que")
+    if safe_settings_grab("load_imgs") == 1: #if we want thumbnails at all
+        starting_directory = GLOBAL_MUSIC_DIR
+        song_names = os.listdir(GLOBAL_MUSIC_DIR)
+
+        for i in range(len(all_songs)):
+            if starting_directory == GLOBAL_MUSIC_DIR: #make sure they didnt click off, if so, CANCEL ITTTT
+                current_song_name = list(all_songs[i])[2]      #god my hate for tuples will never be matched.   WHY AM I STILL USEING THEM?????
+        
+                if valid_audio_name(current_song_name) :
+                    current_songdir = os.path.join(GLOBAL_MUSIC_DIR,current_song_name)
+            
+                    image_data = None
+                    try:
+                        
+                        audio = ID3(current_songdir)
+                        
+                        for tag in audio.values():
+                            if tag.FrameID == "APIC":
+                                image_data = tag.data
+                                break                                                             
+                    except Exception:
+                        pass                                                                     
+
+                    if image_data:
+                        img = Image.open(io.BytesIO(image_data))
+
+                        songdata = list(all_songs[i])
+                        songdata[0] = img
+                        all_songs[i] = tuple(songdata)
+            else:  #wrong indent
+                return   #canel if dir changes while loading images
+            if utilize_realtime_image_que == 1:
+                root.update()
+    else:
+         for i in range(len(all_songs)):
+            current_song = list(all_songs[i])
+            current_song[0] = Image.new("RGBA",(1,1))
+
+            all_songs[i] = tuple(current_song)
+                
 def safeload_song(name, usedir=False):
     image_data = None
     music_dir = GLOBAL_MUSIC_DIR+"/"+name
@@ -131,10 +177,10 @@ def safeload_song(name, usedir=False):
     uploader = ""
     try:
         audio = ID3(songpath)
-        for tag in audio.values():
-            if tag.FrameID == "APIC":
-                image_data = tag.data
-                break
+        #for tag in audio.values():
+            #if tag.FrameID == "APIC":
+                #image_data = tag.data
+                #break
     except Exception:
         pass
 
@@ -143,10 +189,7 @@ def safeload_song(name, usedir=False):
     except Exception:
         pass
 
-    if image_data != None:
-        image = Image.open(io.BytesIO(image_data))
-    else:
-        image = Image.new("RGBA",size=(1,1))
+    image = None
 
     return image, songpath, name, uploader
 
@@ -197,7 +240,6 @@ def compile_music_cache():
 GLOBAL_MUSIC_DIR = find_best_music_dir()
 BASE_DIR = GLOBAL_MUSIC_DIR
 compile_music_cache()
-
 mixer.init()
 
 #SETTINGS RECALL------------------------------
@@ -225,20 +267,20 @@ threading.Thread(target=connect_presence, daemon=True).start()
 
 
 
-def cubic_bounce(start, end, t):
-    # clamp t to [0, 1]
+def cubic_bounce(start, end, t, bounce_mult=0.25):
     if t < 0: t = 0
     if t > 1: t = 1
 
-    # cubic ease-out base
     base = 1 - (1 - t)**3
+    bounce = math.sin(t * math.pi) * (1 - t) * bounce_mult
 
-    # bounce amount (you can tweak 0.25)
-    bounce = math.sin(t * math.pi) * (1 - t) * 0.25
-
-    # final value
     return start + (end - start) * (base + bounce)
 
+def cubic_in(t, start, end):
+    return start + (end - start) * (t ** 3)
+
+def cubic_out(t, start, end):
+    return start + (end - start) * (1 - (1 - t) ** 3)
 
 
 ffmpeg_path = get_ffmpeg_path()
@@ -281,6 +323,9 @@ root = ctk.CTk("#050505")
 root.geometry("700x400")
 root.title("placeify")
 root.resizable(width=False,height=False)
+
+folder_icon = Image.open(resource_path("assets/folder.png"))
+folder_image = ctk.CTkImage(folder_icon,size=(23,16))
 
 pause_state = ctk.BooleanVar(value=False) # unpaused
 FOCUS_INDEX = 0 # internal index
@@ -424,14 +469,36 @@ def seek_pos(event):
 #--------------------------------------------------------------------------------
 #UI FUNCTIONS -------------------------------------------------------------------
 #--------------------------------------------------------------------------------
-def show_settings_menu():
-    settmenu.place(relwidth=1,relheight=1)
-    bg_frame.place(relwidth=1,relheight=1)
-    close_settings_menu_butt.place(relx=0.935,rely=0.01)
+def animate_open_menu(widget,start,final,use_opacity=False,time=0):
+    if time <= 50:
+        widget.place(rely=cubic_out(time/50,start,final))
+        if use_opacity:
+            pywinstyles.set_opacity(widget,time/50)
+            pywinstyles.set_opacity(bg_frame,time/50)
+        time += 2
+        root.after(16,lambda:animate_open_menu(widget,start,final,use_opacity,time))
 
-    bg_frame.lift()
+def animate_close_menu(widget,start,final,use_opacity=False,time=0):
+    if time <= 50:
+        widget.place(rely=cubic_out(time/50,start,final))
+        if use_opacity:
+            pywinstyles.set_opacity(widget,cubic_out(time/50,1,0))
+            pywinstyles.set_opacity(bg_frame,cubic_out(time/50,1,0))
+    time += 2
+    if time > 50:
+        close_focus_menus()
+        pywinstyles.set_opacity(bg_frame,1)
+        return
+    
+    
+    root.after(16,lambda:animate_close_menu(widget,start,final,use_opacity,time))
+
+def show_settings_menu():
+    settmenu.place(relwidth=1,relheight=1,rely=1)
     settmenu.lift()
-    close_settings_menu_butt.lift()
+
+
+    root.after(0,lambda: animate_open_menu(settmenu,-1,0,True))
 
 def close_focus_menus():
     bg_frame.place_forget()
@@ -440,26 +507,47 @@ def close_focus_menus():
     dirmenu.place_forget()
 
     settmenu.place_forget()
-    close_settings_menu_butt.place_forget()
+    
+
+
 
 def save_settings():
-    settings_save = {
+    global saved_settings
+
+    saved_settings = {
         "scroll_speed":scroll_speed_slider.get(),
         "blur_amount": bg_blur_slider.get(),
-        "use_disc":use_disc_check.get()
+        "use_disc":use_disc_check.get(),
+        "load_imgs":use_thumbnails_check.get(),
+        "img_que": True if img_load_meathod_dropdown.get() == "Utilize image Queue" else False 
         }
-
+    print(saved_settings)
     try:
         with open(settings_path, "w") as f:
-            f.write(json.dumps(settings_save))
+            f.write(json.dumps(saved_settings))
         print("✅settings saved successfully!")
     except Exception as e:
         print("❌uh oh, couldnt save settings bc "+str(e))
 
 def close_settings_menu():
     save_settings()
-    close_focus_menus()
+    animate_close_menu(settmenu,0,1,True)
+    
 
+def restore_default_settings():
+    scroll_speed_slider.set(default_settings["scroll_speed"])
+    bg_blur_slider.set(default_settings["blur_amount"])
+
+    if default_settings["img_que"]:
+        img_load_meathod_dropdown.set("Utilize image Queue")
+    else:
+        img_load_meathod_dropdown.set("Wait for images, then update")
+
+    if default_settings["use_disc"]:
+        use_disc_check.select()
+
+    if default_settings["load_imgs"]:
+        use_thumbnails_check.select()
 #-----------------------------------------------------------------------
 #UI ELEMENTS-----------------------------------------------------------------------
 #-----------------------------------------------------------------------
@@ -518,6 +606,7 @@ timelime_label = ctk.CTkLabel(bottom_timeline_bar,fg_color="transparent",text=""
 timelime_label.place(relx=0.79,rely=0.05,relwidth=0.2)
 timeline_slider.lift()
 
+
 ###---------------------------------------------------------------------------------
 ###SETTINGS MENU---------------------------------------------------------------------------------
 def update_scrollspeed_text(event=None):
@@ -547,28 +636,53 @@ bg_blur_slider = ctk.CTkSlider(settmenu,width=600,command=update_bluramount_text
 bg_blur_slider.pack(anchor="w")
 bg_blur_slider.set(safe_settings_grab("blur_amount"))
 
+img_load_meathod_title = ctk.CTkLabel(settmenu,text=f"Thumbnail loading method:",font=("aeril",19,"normal"))
+img_load_meathod_title.pack(anchor="w")
+
+img_load_meathod_dropdown = ctk.CTkOptionMenu(settmenu,width=600,command=update_bluramount_text,values=["Utilize image Queue","Wait for images, then update"],fg_color="#4A4D50",button_color="#696969",button_hover_color="#202020")
+img_load_meathod_dropdown.pack(anchor="w")
+
+if safe_settings_grab("img_que"):
+    img_load_meathod_dropdown.set("Utilize image Queue")
+else:
+    img_load_meathod_dropdown.set("Wait for images, then update")
 
 setting_title = ctk.CTkLabel(settmenu,text="Privacy",font=("aeril",28,"normal"))
 setting_title.pack(anchor="w",pady=(25,9))
 
-use_disc_check = ctk.CTkCheckBox(settmenu,text=f"Use Discord Rich Presence",font=("aeril",19,"normal"))
+def notify_disc_restart():
+    if safe_settings_grab("use_disc") != use_disc_check.get():
+        use_disc_check.configure(text="Use Discord Rich Presence *requires restart to take effect")
+    else:
+        use_disc_check.configure(text="Use Discord Rich Presence")
+use_disc_check = ctk.CTkCheckBox(settmenu,text=f"Use Discord Rich Presence",font=("aeril",19,"normal"),command=notify_disc_restart)
 use_disc_check.pack(anchor="w")
 if safe_settings_grab("use_disc"):
     use_disc_check.select()
 
-
+use_thumbnails_check = ctk.CTkCheckBox(settmenu,text=f"Load Thumbnails",font=("aeril",19,"normal"))
+use_thumbnails_check.pack(anchor="w")
+if safe_settings_grab("load_imgs"):
+    use_thumbnails_check.select()
 
 update_bluramount_text()
 update_scrollspeed_text()
 
-close_settings_menu_butt = ctk.CTkButton(root,text="❌",fg_color="#2B2B2B",hover_color="grey",bg_color="#2B2B2B",width=20,command=close_settings_menu)
+close_settings_menu_butt = ctk.CTkButton(settmenu,text="❌",fg_color="#2B2B2B",hover_color="grey",bg_color="#2B2B2B",width=20,command=close_settings_menu)
 
+restor_default_settings_butt = ctk.CTkButton(settmenu,text="Restore Defaults",fg_color="#2B2B2B",hover_color="grey",bg_color="#2B2B2B",width=20,command=restore_default_settings)
+
+close_settings_menu_butt.place(relx=0.955,rely=0.01)
+restor_default_settings_butt.place(relx=0.78,rely=0.01)
 ###---------------------------------------------------------------------------------
 ###GENERAL FOCUS MENUS --------------------------------------------------------
+def close_musicmenu():
+    animate_close_menu(musicmenu,0.1,1,True)
+
 bg_frame = ctk.CTkFrame(root,fg_color="black")
 pywinstyles.set_opacity(bg_frame, value=0.8)
 
-close = ctk.CTkButton(bg_frame,text="❌",fg_color="black",hover_color="grey",width=20,command=close_focus_menus)
+close = ctk.CTkButton(bg_frame,text="❌",fg_color="black",hover_color="grey",width=20,command=close_musicmenu)
 close.place(relx=0.95,rely=0.01)
 
 ###---------------------------------------------------------------------------------
@@ -600,8 +714,8 @@ def open_appdata_song_dir():
 song_output_portal = ctk.CTkButton(location_entry,text="📂",width=15,border_width=2,border_color="#565B5E",fg_color="#343638",hover_color="#1a1a1a",bg_color="#565B5E",command=open_appdata_song_dir)
 song_output_portal.place(relx=0.95,rely=0)
 
-import_status = ctk.CTkLabel(yt_menu,text="",text_color="red")
-import_status.place(relx=0.1,rely=0.85)
+import_status = ctk.CTkLabel(yt_menu,text="",text_color="red",wraplength=330)
+import_status.place(relx=0.1,rely=0.7)
 import_status.lift()
 
 def safe_import_yturl():
@@ -621,9 +735,11 @@ def safe_import_yturl():
             song_frames.clear()
 
             root.after(0,create_songframes)
+            root.after(0,load_image_thread)
+
             close_focus_menus()
-        except:
-            import_status.configure(text="Somthing went wrong. Please check that the URL is correct.",text_color="red")
+        except Exception as e:
+            import_status.configure(text=f"Somthing went wrong. Please check the error message:\n\n{e}",text_color="red")
         
 
 import_button = ctk.CTkButton(yt_menu,text="Import",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",command=safe_import_yturl)
@@ -648,11 +764,13 @@ def add_music_menu():
     location_entry.configure(state="disabled")
 
     bg_frame.place(relwidth=1,relheight=1)
+    
     musicmenu.place(relx=0.1,relwidth=0.8,
-                rely=0.1,relheight=0.8)
+                rely=1,relheight=0.8)
 
     bg_frame.lift()
     musicmenu.lift()
+    animate_open_menu(musicmenu,-1,0.1,True)
 
 def set_volume_slider(event=None):
     mixer.music.set_volume(volume_slider.get()/2)
@@ -675,7 +793,7 @@ dirmenu = ctk.CTkFrame(musicmenu,border_width=2)
 dirtitle = ctk.CTkLabel(dirmenu,text="Enter Directory Name:",font=("aeril",28,"bold"))
 dirtitle.place(relx=0.05,rely=0.1)
 
-dirname = ctk.CTkEntry(dirmenu,placeholder_text="You can use '/' to create subdirectorys",font=("aeril",22,"bold"))
+dirname = ctk.CTkEntry(dirmenu,placeholder_text="Type directory name here",font=("aeril",22,"bold"))
 dirname.place(relx=0.05,rely=0.25,relwidth=0.8)
 
 dir_status = ctk.CTkLabel(dirmenu,text="",text_color="red")
@@ -736,45 +854,60 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
     else:
         image, song_dir, name, uploader = safeload_song(songdir,usedir=True)
 
-    CURRENT_TRACKDATA = (image,song_dir,name)
+    if os.path.exists(song_dir):
+        CURRENT_TRACKDATA = (image,song_dir,name)
+        
 
-    mixer.music.load(song_dir)
+        mixer.music.load(song_dir)
 
-    current_music_lenght = MP3(song_dir).info.length * 1000 # seconds -> ms
+        current_music_lenght = MP3(song_dir).info.length * 1000 # seconds -> ms
 
-    seek_offset = 0
-    timeline_slider.set(0)
+        seek_offset = 0
+        timeline_slider.set(0)
 
-    manage_pause(customstate=False) # starts playback from seek_offset (0) and sets play_start_time
+        manage_pause(customstate=False) # starts playback from seek_offset (0) and sets play_start_time
 
-    song_title_text.configure(text=os.path.basename(name).replace(".mp3",""))
-    song_creator_text.configure(text=uploader)
+        #title update-----------------------------------------------
+        song_title_text.configure(text=os.path.basename(name).replace(".mp3",""))
+        song_creator_text.configure(text=uploader)
 
-    all_gdirnames = GLOBAL_MUSIC_DIR.replace('\\',"/").split("/")
-    gdirlen = len(all_gdirnames)
+        #discord-----------------------------------------------
+        all_gdirnames = GLOBAL_MUSIC_DIR.replace('\\',"/").split("/")
+        gdirlen = len(all_gdirnames)
 
-    short_gdirname = f"{all_gdirnames[gdirlen-1]}"
+        short_gdirname = f"{all_gdirnames[gdirlen-1]}"
 
-    details = truncate_string(f"{short_gdirname} / {name.replace(".mp3","")} ({uploader})")
+        details = truncate_string(f"{short_gdirname} / {name.replace(".mp3","")} ({uploader})")
 
-    threading.Thread(target=update_presence,args=(details,"vibing to:")).start()
+        threading.Thread(target=update_presence,args=(details,"vibing to:")).start()
 
-    width, height = image.size
+        #BG image-----------------------------------------------
+        width, height = image.size
 
-    root.update_idletasks()
-    root_w = root.winfo_width()
-    root_h = root.winfo_height()
+        root.update_idletasks()
+        root_w = root.winfo_width()
+        root_h = root.winfo_height()
 
-    scale = max(root_w / width, root_h / height)
+        scale = max(root_w / width, root_h / height)
 
-    new_width = int(width * scale)
-    new_height = int(height * scale)
+        new_width = int(width * scale)
+        new_height = int(height * scale)
 
-    image = image.resize((new_width//round(bg_blur_slider.get()*100), new_height//round(bg_blur_slider.get()*100)), Image.Resampling.LANCZOS)
+        image = image.resize((new_width//round(bg_blur_slider.get()*100), new_height//round(bg_blur_slider.get()*100)), Image.Resampling.LANCZOS)
 
-    image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    bgimage = ctk.CTkImage(image, size=(new_width, new_height))
-    bglabel.configure(image=bgimage)
+        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        bgimage = ctk.CTkImage(image, size=(new_width, new_height))
+        bglabel.configure(image=bgimage)
+    else:
+        compile_music_cache()
+
+        for i in range(len(song_frames)):
+            song_frames[i].destroy()
+        song_frames.clear()
+        RENDER_INDEX = 5
+        FOCUS_INDEX = 0
+
+        root.after(0,create_songframes)
 
 def bind_songframe_button_thing(selection_index):
     global FOCUS_INDEX
@@ -796,10 +929,11 @@ def bind_songframe_button_thing(selection_index):
         FOCUS_INDEX = 0
         
         root.after(0,create_songframes)
+        load_image_thread()
     else:
         _, _, name, _ = all_songs[selection_index]
         if selection_index != PLAYING_INDEX:
-            if ".mp3" in name:
+            if valid_audio_name(name):
                 FOCUS_INDEX = selection_index
                 PLAYING_INDEX = selection_index
 
@@ -827,6 +961,9 @@ def bind_songframe_button_thing(selection_index):
 
                 root.after(0,create_songframes)
 
+                load_image_thread()
+
+
 def create_songframes(spaceing=10):  
     for i in range(len(all_songs)): #use the filtered one
         image,_,songname, _ = all_songs[i]
@@ -836,11 +973,11 @@ def create_songframes(spaceing=10):
         btn = ctk.CTkFrame(songframe, width=300, height=40, fg_color="transparent")
         btn.pack()
 
-        ctkimage = ctk.CTkImage(image,size=image.size)
-        bg = ctk.CTkLabel(btn, image=ctkimage, text="")
+        
+        bg = ctk.CTkLabel(btn, text="")
         bg.place(relwidth=1, relheight=1)
-
-        songlabel = ctk.CTkLabel(btn, text=songname.replace(".mp3",""), font=("Arial", 20, "bold"))
+        #print(folder_image)
+        songlabel = ctk.CTkLabel(btn, text=(songname.replace(".mp3","")+("" if valid_audio_name(songname) else "   ")), font=("Arial", 20, "bold"), image=None if valid_audio_name(songname) else folder_image,compound="right")
         songlabel.place(relx=0.5, rely=0.5, anchor="center")
 
         song_frames.append(songframe)
@@ -882,6 +1019,14 @@ def get_average_color(img: Image.Image):
 
 def update_songframes(spaceing=15):
     for i in range(len(song_frames)):
+        
+        if i <= len(all_songs)-1:
+            for child in song_frames[i].winfo_children()[0].winfo_children():
+                if child.cget("text") == "" and child.cget("image") == None and all_songs[i][0] != None:  
+                    ctkimage = ctk.CTkImage(all_songs[i][0],size=all_songs[i][0].size)
+                    child.configure(image=ctkimage)
+                    
+
         songframe = song_frames[i]
 
         offset = (i - RENDER_INDEX)
@@ -969,12 +1114,17 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
         root.after(0,update_songframes)
     root.after(16,interpolate_render_index)
 
+def hide_console():
+    ctypes.windll.kernel32.FreeConsole()
+
 def show_console():
     ctypes.windll.kernel32.AllocConsole()
     sys.stdout = open("CONOUT$", "w")
     sys.stderr = open("CONOUT$", "w")
 
+consoleopen = False
 def keyrelease(event):
+    global consoleopen
     print(event.keysym)
     key = event.keysym
 
@@ -984,21 +1134,24 @@ def keyrelease(event):
     if key == "Up":
         skip_backwards_song()
     if key == "Down":
-        skip_next_song()
+        skip_next_song()  
     if key == "7":
         show_console()
-
-
+        #consoleopen = not(consoleopen)
+        #if consoleopen:
+            #hide_console()
+        #else:
+            #show_console()
 
 #------------------------------
 # UI INITS------------------------------
 root.iconbitmap(resource_path("assets/placeify.ico"))
 root.bind("<MouseWheel>",scroll_wheel)
 root.bind("<KeyRelease>",keyrelease)
-
+      
 root.after(0,create_songframes)
 root.after(1,interpolate_render_index)
-
+root.after(0,load_image_thread)
 root.mainloop()
 
 #SHUTDOWN----------------------------
