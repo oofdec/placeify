@@ -8,21 +8,33 @@ from PIL import Image
 import io
 import os, sys
 import threading
-from yt_dlp import YoutubeDL
 from pypresence import Presence
 import pywinstyles
 import random
 import asyncio
 import json
 import ctypes
+import subprocess
+
+if sys.platform == "win32":
+    CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW
+else:
+    CREATE_NO_WINDOW = 0
+
+
+
 
 
 default_settings = {"scroll_speed":0.08,
                     "blur_amount":0.25,
                     "use_disc":True,
                     "load_imgs":True,
-                    "img_que":True
+                    "img_que":True,
+                    "console_startup":False
                     }
+
+bookmarks = []
+bookmark_frames = []  # for the ui elements
 
 def safe_mkdir(dirname):
     if not os.path.exists(dirname):
@@ -37,6 +49,7 @@ def find_best_music_dir(): # this is so stable trust bro trust
     placeify_path = os.path.join(appdata_path,"placeify")
     music_path = os.path.join(appdata_path,"placeify","music")
     setting_path = os.path.join(appdata_path,"placeify","settings.json")
+    bookmarks_path = os.path.join(appdata_path,"placeify","bookmarks.json")
     
     # step 1.         create all directorys
     safe_mkdir(placeify_path)
@@ -48,6 +61,13 @@ def find_best_music_dir(): # this is so stable trust bro trust
         print("✅settings.json created")
     else:
         print("ℹ️settings.json already exists")
+
+    if not os.path.exists(bookmarks_path):
+        with open(bookmarks_path,"w") as f:
+            f.write(json.dumps([]))
+        print("✅bookmarks.json created")
+    else:
+        print("ℹ️bookmarks.json already exists")
     
     return music_path
 
@@ -61,11 +81,14 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-def get_ffmpeg_path():
+def get_specialapp_path(name):
+    name = os.path.join("assets","downloading",name)
+    appname = name + ".exe"
+
     if hasattr(sys, "_MEIPASS"):
-        return os.path.join(sys._MEIPASS, "ffmpeg", "ffmpeg.exe")
+        return os.path.join(sys._MEIPASS, appname)
     else:
-        return os.path.join("ffmpeg", "ffmpeg.exe")
+        return os.path.join(appname)
 
 
 def update_presence(state, details):
@@ -79,6 +102,7 @@ def update_presence(state, details):
             )
         except:
             pass
+
 
 def truncate_string(text, limit = 125):
     if len(text) <= limit:
@@ -236,9 +260,16 @@ def compile_music_cache():
         if ext == "":
             all_songs.append((Image.new("RGBA",size=(1,1)),None,songname,""))
 
-# BASE INITS---MUSIC DIRS------------------
+def show_console():
+    ctypes.windll.kernel32.AllocConsole()
+    sys.stdout = open("CONOUT$", "w")
+    sys.stderr = open("CONOUT$", "w")
+
+# BASE INITS---MUSIC DIRS-----------------
 GLOBAL_MUSIC_DIR = find_best_music_dir()
 BASE_DIR = GLOBAL_MUSIC_DIR
+in_menu = False
+
 compile_music_cache()
 mixer.init()
 
@@ -246,6 +277,8 @@ mixer.init()
 appdata_path = os.getenv('APPDATA')
 placeify_path = os.path.join(appdata_path,"placeify")
 settings_path = os.path.join(placeify_path,"settings.json")
+bookmarks_path = os.path.join(appdata_path,"placeify","bookmarks.json")
+
 with open(settings_path,"r") as f:
     try:
         saved_settings = json.loads(f.read())
@@ -256,7 +289,25 @@ with open(settings_path,"r") as f:
         with open(settings_path, "w") as f:
             f.write(json.dumps(saved_settings))
         print("   └ ℹ️default settings restored.")
+        
+
+if safe_settings_grab("console_startup"):
+    show_console()
+    print("   🧰 DEBUG MODE ON --------------------------------------------------------\n   This console can only be created AFTER some logging has already occured, and are therefor hidden.\n for the full console, download the full open-source version of this program.\n----------------------------------------------------------- ")
 print("GLOBAL DIR: "+GLOBAL_MUSIC_DIR)
+
+with open(bookmarks_path,"r") as f:
+    try:
+        bookmarks = json.loads(f.read())
+        print("✅ sucessfully loaded bookmarks")
+    except:
+        print("🔴 bookmarks courrupted - could not read json. Deleteing everything :(")
+
+        with open(bookmarks_path, "w") as f:
+            f.write(json.dumps([]))
+
+        bookmarks = []
+
 
 #DISCORD------------------
 CLIENT_ID = "1532524855130587216"
@@ -283,40 +334,47 @@ def cubic_out(t, start, end):
     return start + (end - start) * (1 - (1 - t) ** 3)
 
 
-ffmpeg_path = get_ffmpeg_path()
+ffmpeg_path = get_specialapp_path("ffmpeg")
+deno_path = get_specialapp_path("deno")
+yt_dlp_path = get_specialapp_path("yt-dlp")
+
+
+def check_specalpath(path):
+    if os.path.exists(path):
+        print(f"✅ {path} Exists")
+    else:
+        print(f"❌ {path} not found")
+
+print("🌟 special paths: -----------------")
+check_specalpath(deno_path)
+check_specalpath(ffmpeg_path)
+check_specalpath(yt_dlp_path)
+print("⚙️ settings recall: -----------------")
+
 def download_youtube(url):
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'ffmpeg_location': ffmpeg_path,   # FINALLYYYYYYY 
-        'outtmpl': f'{GLOBAL_MUSIC_DIR+"/"}%(title)s.%(ext)s',   # auto name file as the video title
-        'writethumbnail': True,
-        'postprocessors': [
-            {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            },
-            {
-                'key': 'FFmpegMetadata',   # <-- mm yes ffmpeg
-            },
-            {
-                'key': 'EmbedThumbnail',   # embeds thumbnail into mp3 somehow
-            }
-        ]
-    }
+    cmd = [
+        yt_dlp_path,
+        "--format", "bestaudio/best",
+        "--extract-audio",
+        "--audio-format", "mp3",
+        "--write-thumbnail",
+        "--embed-thumbnail",
+        "--add-metadata",
+        "--ffmpeg-location", ffmpeg_path,
+        "--output", f"{GLOBAL_MUSIC_DIR}/%(title)s.%(ext)s",
+        "--js-runtime", f"deno:{deno_path}",
+        "--remote-components", "ejs:github",
+        url
+    ]
 
-    with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+    subprocess.run(cmd)
 
-    #is all of this stored in the mp3?    dunno, probs wont accsess it anyway
-    print("Title:", info.get("title"))
-    print("Uploader:", info.get("uploader"))
-    print("Tags:", info.get("tags"))
-    print("Description:", info.get("description"))
-    print("Channel:", info.get("channel"))
-    print("Upload date:", info.get("upload_date"))
-
-
+    #clear all images in dir
+    gdir_files = os.listdir(GLOBAL_MUSIC_DIR)
+    for filename in gdir_files:
+        if ".webp" in filename or ".png" in filename or ".jpeg" in filename or ".jpg" in filename:
+            os.remove(os.path.join(GLOBAL_MUSIC_DIR,filename))
+            print(f"cleaned {filename}")
 #-----------------------------------------------------------------------------------------------------------
 #-----------UI Stuff--------------------------------------------------------------------------------
 root = ctk.CTk("#050505")
@@ -341,6 +399,7 @@ global_x_offset = 0 # applys to all widgets for switching diretorys
 seek_offset = 0      # position (seconds) within the track where playback last started/resumed
 play_start_time = 0  # time.time() when playback last started/resumed
 
+random.seed(random.randint(0,10000000)) # i dunno, it didnt really feel random for me before \_=-=_/
 #--------------------------------------------------------------------------------
 #FUNCTIONS ----------------------------------------------------------------------
 #--------------------------------------------------------------------------------
@@ -470,6 +529,9 @@ def seek_pos(event):
 #UI FUNCTIONS -------------------------------------------------------------------
 #--------------------------------------------------------------------------------
 def animate_open_menu(widget,start,final,use_opacity=False,time=0):
+    global in_menu
+    in_menu = True
+
     if time <= 50:
         widget.place(rely=cubic_out(time/50,start,final))
         if use_opacity:
@@ -479,6 +541,9 @@ def animate_open_menu(widget,start,final,use_opacity=False,time=0):
         root.after(16,lambda:animate_open_menu(widget,start,final,use_opacity,time))
 
 def animate_close_menu(widget,start,final,use_opacity=False,time=0):
+    global in_menu
+    in_menu = False
+
     if time <= 50:
         widget.place(rely=cubic_out(time/50,start,final))
         if use_opacity:
@@ -519,7 +584,8 @@ def save_settings():
         "blur_amount": bg_blur_slider.get(),
         "use_disc":use_disc_check.get(),
         "load_imgs":use_thumbnails_check.get(),
-        "img_que": True if img_load_meathod_dropdown.get() == "Utilize image Queue" else False 
+        "img_que": True if img_load_meathod_dropdown.get() == "Utilize image Queue" else False,
+        "console_startup":show_console_startup.get()
         }
     print(saved_settings)
     try:
@@ -532,7 +598,72 @@ def save_settings():
 def close_settings_menu():
     save_settings()
     animate_close_menu(settmenu,0,1,True)
-    
+
+def tween_linear(start, end, t):
+    return start + (end - start) * t
+
+
+def update_preview_tracktime(event=None):
+    tracklenght = current_music_lenght//1000
+
+
+    current_bookmark_tracktime = tween_linear(0,tracklenght,bookmark_track.get())
+
+    bookmark_timestamp_preview.configure(text=f"{calulate_seconds_strtime(current_bookmark_tracktime)} / {calulate_seconds_strtime(tracklenght)}")
+
+def find_bookmark_index_from_name(name):
+    for i in range(len(bookmarks)):
+        current_bookmark = bookmarks[i]
+        if current_bookmark['song'] == name:
+            return i
+    return None
+
+def remove_timestamp(index):
+    current_song = find_bookmark_index_from_name(CURRENT_TRACKDATA[2])
+
+    bookmarks[current_song]["timestamps"].pop(index)
+    bookmarks[current_song]["names"].pop(index)
+
+    reload_bookmark_manager_timestamps()
+    reload_bookmarks()
+
+bookmark_manager_frames = [] #i hate this so much
+def reload_bookmark_manager_timestamps():
+    for bookmark in bookmark_manager_frames:
+        bookmark.destroy()
+    bookmark_manager_frames.clear()  #.clear() is a mutation, no need for global declaration
+
+
+    bookmark_data = find_bookmarks_from_songname(CURRENT_TRACKDATA[2])
+    if bookmark_data: #if any data exists for this song
+        timestamps = bookmark_data["timestamps"]
+
+        for i in range(len(timestamps)):
+            indicator = ctk.CTkButton(bookmark_track,width=15,text="X",text_color="black",fg_color="white",corner_radius=2,height=25,command=lambda index=i:remove_timestamp(index))
+            indicator.place(relx=timestamps[i]) # timestamp is recorded in the slider (0-1) on the manager, and so is relx (0-1), so this becomes really easy
+
+            bookmark_manager_frames.append(indicator) # so they can be removed later
+
+
+def show_bookmark_manager():
+    manage_pause(customstate=True)
+    if CURRENT_TRACKDATA != ():
+        global bookmark_current_s 
+        bookmark_menu.place(relwidth=1,relheight=1,rely=1)
+        bookmark_menu.lift()
+
+        bookmark_target.configure(text=f" -  '{CURRENT_TRACKDATA[2].replace('.mp3',"")}'")
+        bookmark_track.set(timeline_slider.get())
+      
+        update_preview_tracktime()
+        reload_bookmark_manager_timestamps()
+
+
+        root.after(0,lambda: animate_open_menu(bookmark_menu,-1,0,True))
+
+
+def close_bookmark_manager():
+    root.after(0,lambda: animate_close_menu(bookmark_menu,0,1,True))
 
 def restore_default_settings():
     scroll_speed_slider.set(default_settings["scroll_speed"])
@@ -548,6 +679,9 @@ def restore_default_settings():
 
     if default_settings["load_imgs"]:
         use_thumbnails_check.select()
+
+    if default_settings["console_startup"]:
+        show_console_startup.select()
 #-----------------------------------------------------------------------
 #UI ELEMENTS-----------------------------------------------------------------------
 #-----------------------------------------------------------------------
@@ -572,19 +706,23 @@ song_creator_text.place(relx=0.01,rely=0.11)
 
 seek_previous_song_image = ctk.CTkImage(Image.open(resource_path("assets/previous_focus.png")), size=(14,14))
 seek_previous_song_butt = ctk.CTkButton(bottom_options_bar,text="",image=seek_previous_song_image,fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=skip_backwards_song)
-seek_previous_song_butt.place(relx=0.17,rely=0.05)
+seek_previous_song_butt.place(relx=0.12,rely=0.05)
 
 seek_next_song_image = ctk.CTkImage(Image.open(resource_path("assets/next_focus.png")), size=(14,14))
 seek_next_song_butt = ctk.CTkButton(bottom_options_bar,text="",image=seek_next_song_image,fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=skip_next_song)
-seek_next_song_butt.place(relx=0.26,rely=0.05)
+seek_next_song_butt.place(relx=0.195,rely=0.05)
 
 random_song_butt_image = ctk.CTkImage(Image.open(resource_path("assets/shuffle v2.png")), size=(14,14))
 random_song_butt = ctk.CTkButton(bottom_options_bar,text="",fg_color="#2B2B2B",hover_color="#1a1a1a",width=5,command=random_song,image=random_song_butt_image)
-random_song_butt.place(relx=0.35,rely=0.05)
+random_song_butt.place(relx=0.27,rely=0.05)
 
 restart_song_image = ctk.CTkImage(Image.open(resource_path("assets/restart.png")), size=(14,14))
 restart_song_button = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",text="",hover_color="#1a1a1a",image=restart_song_image,width=5,command=restart_current_song)
-restart_song_button.place(relx=0.45,rely=0.05)
+restart_song_button.place(relx=0.345,rely=0.05)
+
+bookmark_manager_image = ctk.CTkImage(Image.open(resource_path("assets/bookmark.png")), size=(14,14))
+bookmark_manager_button = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",text="",hover_color="#1a1a1a",image=bookmark_manager_image,width=5,command=show_bookmark_manager)
+bookmark_manager_button.place(relx=0.505,rely=0.05)
 
 settings_button = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="⚙️",width=25,command=show_settings_menu,height=15,font=("ariel",15,"bold"))
 settings_button.place(relx=0.59,rely=0.05)
@@ -665,6 +803,11 @@ use_thumbnails_check.pack(anchor="w")
 if safe_settings_grab("load_imgs"):
     use_thumbnails_check.select()
 
+show_console_startup = ctk.CTkCheckBox(settmenu,text=f"Open Console on startup",font=("aeril",19,"normal"))
+show_console_startup.pack(anchor="w")
+if safe_settings_grab("console_startup"):
+    show_console_startup.select()
+
 update_bluramount_text()
 update_scrollspeed_text()
 
@@ -685,6 +828,61 @@ pywinstyles.set_opacity(bg_frame, value=0.8)
 close = ctk.CTkButton(bg_frame,text="❌",fg_color="black",hover_color="grey",width=20,command=close_musicmenu)
 close.place(relx=0.95,rely=0.01)
 
+def add_bookmark():
+    global bookmarks
+
+    current_songname = CURRENT_TRACKDATA[2]
+    song_has_bookmarkdata = find_bookmarks_from_songname(current_songname) # get from name
+    if song_has_bookmarkdata != None: #if data is already written for it
+        for i in range(len(bookmarks)):
+            if bookmarks[i]["song"] == current_songname:
+                bookmarks[i]["timestamps"].append(bookmark_track.get())
+                bookmarks[i]["names"].append(bookmark_name_entry.get())
+
+                print("appended bookmark")
+                
+    else:
+        bookmarks.append({
+            "song":current_songname,
+            "timestamps":[bookmark_track.get()],
+            "names":[bookmark_name_entry.get()]
+            })
+        print("created new entry")
+
+    root.after(0,lambda: animate_close_menu(bookmark_menu,0,1,True)) #this function is only acsessed though the add button.     or atleast i hope, i dunno ill probs forget aboutit then itll turn into an issue later
+    reload_bookmarks()
+###---------------------------------------------------------------------------------
+###🔖BOOKMAKRS --------------------------------------------------------
+bookmark_menu = ctk.CTkFrame(root,border_width=2)
+
+bookmark_title = ctk.CTkLabel(bookmark_menu,text="Bookmarks",font=("aeril",28,"bold"))
+bookmark_title.place(x=15,y=15)
+
+bookmark_target = ctk.CTkLabel(bookmark_menu,text=f"'  -  {"if you're' seeing this, then i fucked osmething up"}'",font=("aeril",13,"bold"))
+bookmark_target.place(x=170,y=20)
+
+track_instuction = ctk.CTkLabel(bookmark_menu,text="Adjust the track for the position of this bookmark",font=("aeril",13,"bold"))
+track_instuction.place(relx=0.02,rely=0.3)
+
+bookmark_track = ctk.CTkSlider(bookmark_menu,command=update_preview_tracktime)
+bookmark_track.place(relx=0.02,rely=0.4,relwidth=0.9)
+
+bookmark_timestamp_preview = ctk.CTkLabel(bookmark_menu,text="345/345",font=("aeril",13,"bold"),fg_color="#202020",corner_radius=5,width=90)
+bookmark_timestamp_preview.place(relx=0.8,rely=0.3)
+
+bookmark_name_instuction = ctk.CTkLabel(bookmark_menu,text="Name your bookmark",font=("aeril",13,"bold"))
+bookmark_name_instuction.place(relx=0.02,rely=0.52)
+
+bookmark_name_entry = ctk.CTkEntry(bookmark_menu,border_width=2)
+bookmark_name_entry.place(relx=0.02,rely=0.6,relwidth=0.9)
+bookmark_name_entry.insert(ctk.END,"That good part")
+
+add_bookmark_button = ctk.CTkButton(bookmark_menu,text="Add",border_width=2,fg_color="#2B2B2B",hover_color="#1a1a1a",command=add_bookmark)
+add_bookmark_button.place(relx=0.72,rely=0.85)
+
+
+close_bookmark_menu_butt = ctk.CTkButton(bookmark_menu,text="❌",fg_color="#2B2B2B",hover_color="grey",bg_color="#2B2B2B",width=20,command=close_bookmark_manager)
+close_bookmark_menu_butt.place(relx=0.955,rely=0.01)
 ###---------------------------------------------------------------------------------
 ### ADD DATA MENU ----------------------------------------------------------
 musicmenu = ctk.CTkFrame(root,border_width=2)
@@ -773,14 +971,14 @@ def add_music_menu():
     animate_open_menu(musicmenu,-1,0.1,True)
 
 def set_volume_slider(event=None):
-    mixer.music.set_volume(volume_slider.get()/2)
+    mixer.music.set_volume(volume_slider.get()/2.5)
 
 volume_frame = ctk.CTkFrame(root,corner_radius=5,border_width=2,bg_color="#474747")
 volume_frame.place(relx=0,rely=0.565,relwidth=0.04,relheight=0.3)
 
 volume_slider = ctk.CTkSlider(volume_frame,orientation="vertical",command=set_volume_slider)
 volume_slider.place(relx=0.2,rely=0.02,relheight=0.95)
-volume_slider.set(0.2)
+volume_slider.set(0.55)
 set_volume_slider()
 
 add_music_butt = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="➕",width=25,command=add_music_menu)
@@ -843,30 +1041,88 @@ def apply_playoffset_tween(time=0):
         time += 1
         root.after(5,lambda:apply_playoffset_tween(time))
 
+def find_bookmarks_from_songname(name):
+    for bookmark in bookmarks:
+        if bookmark["song"] == name:
+            return bookmark
+    return None
+
+def seek_to_bookmark(index):
+    selected_bookmark = find_bookmark_index_from_name(CURRENT_TRACKDATA[2])
+    timestamp = bookmarks[selected_bookmark]["timestamps"][index]
+    timeline_slider.set(timestamp)
+    
+    hold_pausestate = pause_state.get()
+
+    seek_pos(None)
+
+    if not hold_pausestate:#if not paused
+        manage_pause(False) # then play, seek_pos() pauses it by default, so we wanna preserve that state
+
+timestamp_hover_frame = ctk.CTkFrame(root,border_width=15,fg_color="black",border_color="white")  #no clue why you cant see it but worth a shot i guess
+timestamp_hover_name = ctk.CTkLabel(timestamp_hover_frame,text="",fg_color="transparent")
+timestamp_hover_name.pack()
+
+def timestamp_hover(event,index):
+    timestamp_widget = bookmark_frames[index]
+    location_x, _ = (timestamp_widget.winfo_x(),timestamp_widget.winfo_y())
+
+    timestamp_hover_name.configure(text=f"  {bookmarks[find_bookmark_index_from_name(CURRENT_TRACKDATA[2])]['names'][index]}  ") #sonion... what the fu
+    
+    timestamp_hover_frame.place(x=location_x,y=350) #yeah y pos kinda broke but it dosnt really matter
+    timestamp_hover_frame.lift()
+
+def hover_timestamp_leave(event):
+    timestamp_hover_frame.place_forget()
+
+def reload_bookmarks():
+    #4. bookmarks (oohhhhh scarryyyyy)
+    for bookmark in bookmark_frames:
+        bookmark.destroy()
+    bookmark_frames.clear()  #.clear() is a mutation, no need for global declaration
+
+
+    bookmark_data = find_bookmarks_from_songname(CURRENT_TRACKDATA[2])
+    if bookmark_data: #if any data exists for this song
+        timestamps = bookmark_data["timestamps"]
+
+        for i in range(len(timestamps)):
+            indicator = ctk.CTkButton(timeline_slider,width=6,height=15,fg_color="white",corner_radius=5,text="",command=lambda index=i:seek_to_bookmark(index),bg_color="#2B2B2B")
+            indicator.place(relx=timestamps[i]) # timestamp is recorded in the slider (0-1) on the manager, and so is relx (0-1), so this becomes really easy
+
+            indicator.bind("<Enter>",lambda event,index=i:timestamp_hover(event,index))
+            indicator.bind("<Leave>",hover_timestamp_leave)
+            bookmark_frames.append(indicator) # so they can be removed later
+
+
 
 def select_song(customindex=FOCUS_INDEX, songdir=None):
     global CURRENT_TRACKDATA
     global current_music_lenght
     global seek_offset
 
+    # 1. datagrabbing
     if songdir == None:
         image, song_dir, name, uploader = all_songs[customindex]
     else:
         image, song_dir, name, uploader = safeload_song(songdir,usedir=True)
+    
+    
+    if os.path.exists(song_dir): #2. if video sill exists
+        #3. setmusic player stuff ----------------------------------------
+        if not songdir == None: #if its a full dir
+            ext, tail = os.path.split(name)
+            name = tail
 
-    if os.path.exists(song_dir):
         CURRENT_TRACKDATA = (image,song_dir,name)
-        
-
         mixer.music.load(song_dir)
-
         current_music_lenght = MP3(song_dir).info.length * 1000 # seconds -> ms
-
         seek_offset = 0
         timeline_slider.set(0)
-
         manage_pause(customstate=False) # starts playback from seek_offset (0) and sets play_start_time
 
+        
+        reload_bookmarks() # conveient lil guy, aint he?
         #title update-----------------------------------------------
         song_title_text.configure(text=os.path.basename(name).replace(".mp3",""))
         song_creator_text.configure(text=uploader)
@@ -882,22 +1138,23 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
         threading.Thread(target=update_presence,args=(details,"vibing to:")).start()
 
         #BG image-----------------------------------------------
-        width, height = image.size
+        if image:
+            width, height = image.size
 
-        root.update_idletasks()
-        root_w = root.winfo_width()
-        root_h = root.winfo_height()
+            root.update_idletasks()
+            root_w = root.winfo_width()
+            root_h = root.winfo_height()
 
-        scale = max(root_w / width, root_h / height)
+            scale = max(root_w / width, root_h / height)
 
-        new_width = int(width * scale)
-        new_height = int(height * scale)
+            new_width = int(width * scale)
+            new_height = int(height * scale)
 
-        image = image.resize((new_width//round(bg_blur_slider.get()*100), new_height//round(bg_blur_slider.get()*100)), Image.Resampling.LANCZOS)
+            image = image.resize((new_width//round(bg_blur_slider.get()*100), new_height//round(bg_blur_slider.get()*100)), Image.Resampling.LANCZOS)
 
-        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        bgimage = ctk.CTkImage(image, size=(new_width, new_height))
-        bglabel.configure(image=bgimage)
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            bgimage = ctk.CTkImage(image, size=(new_width, new_height))
+            bglabel.configure(image=bgimage)
     else:
         compile_music_cache()
 
@@ -1061,15 +1318,16 @@ def scroll_wheel(event):
     # clamp to valid range
     FOCUS_INDEX = max(0, min(len(all_songs)-1, FOCUS_INDEX))
 
-    # update button color
+    # update button color - what was this for again?   i forgot..
 
 def calulate_seconds_strtime(seconds):
-    s = round(seconds)%60
-    m = round(seconds//60)
-
+    seconds = int(seconds)
+    m = seconds // 60
+    s = seconds % 60
     return f"{m}:{s:02d}"
-   
 
+
+   
 def interpolate_render_index(): # change the focus index as much as you want, BECAUSE I USED TO USE SCRATCH!!! AH HA HA HA HA
     global FOCUS_INDEX
     global RENDER_INDEX
@@ -1117,18 +1375,12 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
 def hide_console():
     ctypes.windll.kernel32.FreeConsole()
 
-def show_console():
-    ctypes.windll.kernel32.AllocConsole()
-    sys.stdout = open("CONOUT$", "w")
-    sys.stderr = open("CONOUT$", "w")
-
-consoleopen = False
 def keyrelease(event):
     global consoleopen
     print(event.keysym)
     key = event.keysym
 
-    if key == "BackSpace" and GLOBAL_MUSIC_DIR != BASE_DIR:
+    if key == "BackSpace" and GLOBAL_MUSIC_DIR != BASE_DIR and not in_menu:
         bind_songframe_button_thing("back")
     
     if key == "Up":
@@ -1137,11 +1389,6 @@ def keyrelease(event):
         skip_next_song()  
     if key == "7":
         show_console()
-        #consoleopen = not(consoleopen)
-        #if consoleopen:
-            #hide_console()
-        #else:
-            #show_console()
 
 #------------------------------
 # UI INITS------------------------------
@@ -1161,3 +1408,7 @@ except:
     pass
 mixer.music.stop()
 save_settings()
+
+
+with open(bookmarks_path, "w") as f:
+    f.write(json.dumps(bookmarks))
