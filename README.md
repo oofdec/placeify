@@ -18,7 +18,7 @@ Features:
 
 **NON-DEVELOPERS**
 
-  If you’re not a developer, don’t worry — just download the EXE version from the Releases page.
+  If you’re not a developer, don’t worry - just download the EXE version from the Releases page.
   
   1. Open `placeify.exe`
   2. Click the + button
@@ -75,6 +75,6 @@ You can find that in the `LICENSE` file or in the "License" section on the repos
 Although most bugs have been sorted out, there are still many chances that there are more to find. If you found any, please let me know!
 Or if anything looks off- press "7" and check the console. You might need to try and replicate the bug in order to find it again though...
 
-I also apologize in advance, I know that the engine is just 700 lines of spaghetti, and I don't know how to structure it and I WILL reformat it later I swear
+I also apologize in advance, I know that the engine is just 700 (edit: 1400) lines of spaghetti, and I don't know how to structure it and I WILL reformat it later I swear
 
 ![Project Logo](./assets/placeify.png)
