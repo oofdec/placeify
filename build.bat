@@ -1,13 +1,8 @@
-pyinstaller --onefile --noconsole ^
+pyinstaller --onefile --noconsole^
   --clean ^
   --name=placeify^
   --add-data "assets;assets" ^
   --icon="assets/placeify.ico" ^
-  --hidden-import=yt_dlp ^
-  --hidden-import=yt_dlp.extractor ^
-  --hidden-import=yt_dlp.postprocessor ^
-  --hidden-import=yt_dlp.utils ^
-  --add-binary "ffmpeg/ffmpeg.exe;ffmpeg" ^
   main.py
 
 echo build complete!
