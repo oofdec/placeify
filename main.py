@@ -37,11 +37,10 @@ import assets.dependancies.changelogs as changelogs
 import assets.dependancies.ui.home_ui as home_ui
 import assets.dependancies.multinstance as mutinstance
 
-#im so sad sonic originals is over :(
-#BUT ITS THE SPOOKY-EST DAY OF THE SPOOKY MONTH SO IT'S OKAY!!!!!!!
+#im so sad sonic originals is over 
 
 # HIGHEST PRIORITY:
-    #final release
+    #playlist support for yt
 
 # SECOND PRIORITY
     #add full support for all ext's (ogg, wav, and uh i think thats it actually...)
@@ -126,6 +125,10 @@ def find_best_music_dir(): # this is so stable trust bro trust
 
     safe_create_appdata_save(settings_path,default_settings)
     safe_create_appdata_save(bookmarks_path,[])
+
+    if is_new_user:
+        safe_create_appdata_save(directorys_path,{music_path:[]})
+        safe_create_appdata_save(recents_path,[])
 
     return music_path
 
@@ -461,8 +464,17 @@ def rebind_all_songframes():
             image_label.bind("<Leave>", bind_leave_cursor)
             title_label.bind("<Leave>", bind_leave_cursor)
 
+def sanatize_system_songname(name): #every song stored inside the system should have a .mp3, it should only by removed when shown on the UI. 
+    name = os.path.basename(name)
+    if ".mp3" in name:
+        striped_name = name[:-4]
+        name = striped_name + ".mp3"
+    else:
+        name = name + ".mp3"
+    return name
+
 def lw_add_song(name, include_cdir=False): #im calling theese "lightweight" functions, they're designed to replace the constant full cache refresh that is currently used.
-    name = os.path.basename(name)+".mp4"
+    name = sanatize_system_songname(name)
     library_song_widget, label = library_song_ui_template(name)
     library_song_widget.pack()
 
@@ -1295,23 +1307,25 @@ external_song_import_youtube_button.place(relx=0.7,rely=0.85)
 external_import_menu.place(relx=0.1,relwidth=0.8,rely=1,relheight=0.8)
 
 def import_external_song(path,name):
-    if all_songs == []:
-        kickstart_song_systems()
+    if valid_audio_name(name):
+        if all_songs == []:
+            kickstart_song_systems()
 
-    external_song_import_feedback.configure(text="")
-    fullname = name.get()+".mp3"
-    if name.get().strip() == "":
-        external_song_import_feedback.configure(text="Song name cannot be empty.")
-    else:    
-        try:
-            shutil.copy(path,os.path.join(music_path,fullname))
+        external_song_import_feedback.configure(text="")
+        fullname = sanatize_system_songname(name)
+        if name.get().strip() == "":
+            external_song_import_feedback.configure(text="Song name cannot be empty.")
+        else:    
+            try:
+                shutil.copy(path,os.path.join(music_path,fullname))
 
-            lw_add_song(fullname,external_song_add_to_cdir_check.get())
-            animate_close_menu(external_import_menu,0.1,1,True)
-        except Exception as e:
-            external_song_import_feedback.configure(text=f"An error occurred: \n{e}")
-    
-
+                lw_add_song(fullname,external_song_add_to_cdir_check.get())
+                animate_close_menu(external_import_menu,0.1,1,True)
+            except Exception as e:
+                external_song_import_feedback.configure(text=f"An error occurred: \n{e}")
+    else:
+        mb.showerror("Unsupported Media type",f"I'm really sorry, but Placeify does not yet provide support for a {name[-4:]} filetype yet!")
+        return
 
 
 def open_import_menu(path:str): #called from mutinstance callback
@@ -1795,9 +1809,9 @@ def thread_download_yt(safe_url):
                 print(f"yt playlist import: {songfile}")
         else:
             lw_add_song(final_path,yt_add_to_cdir.get()) 
-        close_focus_menus()
         
         import_status.configure(text="Video Imported Successfully!",text_color="green")
+
     except yt_dlp.utils.DownloadError as e:
         import_status.configure(text=f"Invalid URL - DownloadError",text_color="red")
     finally:
@@ -2469,7 +2483,7 @@ apply_rename_btn.place(rely=0.83,relx=0.62)
 delete_frame = ctk.CTkFrame(root,width=400,height=280,border_width=1,border_color="#666666")
 delete_frame.place(relx=0.2,rely=-1)
 
-delete_title = ctk.CTkLabel(delete_frame,text="Delete Song",font=("",18,"bold")) #why dose this spelling look so wrong?
+delete_title = ctk.CTkLabel(delete_frame,text="Delete Song",font=("",18,"bold"))
 delete_title.place(x=5,y=5)
 
 delete_song_title = ctk.CTkLabel(delete_frame,text="song name askdjhksdlf ansdlfkj",font=("",15,"bold"),fg_color="#181818",corner_radius=5) 
@@ -2648,10 +2662,6 @@ def create_songframes(spaceing=10):
 
 #edit: somehow- os.walk fits this format like... perfectly.... what.
 #edit #2 - we cant actually do that second list thing you BAFOON. haveing an entire list containing EACH DIRECTORY??? DO YOU KNOW HOW EXPENSIVE THAT WOULD BE??? NO??   VERY.    VERY EXPENSIVE.
-def get_songs_in_directory(directory:str):
-    pass
-
-
 def get_average_color(img: Image.Image):
     small = img.resize((1, 1), Image.Resampling.LANCZOS)
     return small.getpixel((0, 0))
