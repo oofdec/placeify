@@ -10,6 +10,9 @@ import pywinstyles
 
 from mutagen.id3 import ID3
 from mutagen.mp3 import MP3
+from mutagen.wave import WAVE
+from mutagen.oggvorbis import OggVorbis
+
 from mutagen.easyid3 import EasyID3
 from pygame import mixer
 
@@ -37,25 +40,19 @@ import assets.dependancies.changelogs as changelogs
 import assets.dependancies.ui.home_ui as home_ui
 import assets.dependancies.multinstance as mutinstance
 
-#im so sad sonic originals is over 
-
 # HIGHEST PRIORITY:
-    #playlist support for yt
+
 
 # SECOND PRIORITY
-    #add full support for all ext's (ogg, wav, and uh i think thats it actually...)
     #add a "..." button to the library menu, make it contain delete and renameing functions.
 
-   # visualzier
+    # visualzier
 
 # COMPLETELY OPTIONAL:
+    #advanced bookmark editor (select bookmarks - renaming func, moving, deleting)
+    # full edit menu  - title, image, author
+
     # mutiscreen support
-
-
-#sanity check:
-
-#new users -  detected, works/
-#transfered - works cleanly
 
 app_arguments = sys.argv
 def init_passes():
@@ -67,7 +64,7 @@ def init_passes():
         CREATE_NO_WINDOW = 0
         mb.showwarning("Untested platform",f"You are running this app on a unsuported OS, ({sys.platform}) expect bugs and errors.")
 
-APP_VERSION = 12
+APP_VERSION = 14
 default_settings = {
                     "scroll_speed":0.08,
                     "blur_amount":0.25,
@@ -196,17 +193,20 @@ def connect_presence():
             print("Presence failed:", e)
             failed_presense = True
 
-
-#ORGANIZE!
-#add post image grabbing que
-
-#oh wow this is still here... uh i mean i think i should keep it its like a artifact at this point...
-
 #-----------------------------------------------------------------------------------------------------------
 #-----------music file stuff--------------------------------------------------------------------------------
+valid_audio_tails = [
+    ".mp3",
+    ".ogg",
+    ".wav"
+]
+
 def valid_audio_name(name):
-    if ".mp3" in name: # or ".ogg" in name or ".wav" in name: commenting theese out for now until i add mofitication detection and support for other extentions.
-        return True
+    _, tail = os.path.splitext(name)
+    if not tail:
+        return "dir"
+    if tail in valid_audio_tails:
+        return tail
     else:
         return False
 
@@ -298,11 +298,12 @@ def safe_settings_grab(name):
             return None
 
 def play_current_selected_library_song():
+    global PLAYING_INDEX
+    PLAYING_INDEX = None
     select_song(songdir=os.path.join(music_path,current_song_hover))
 
 def maintain_library_aftermenu(): #i hate this bro why is it like this
-    bg_frame.lift()
-    library_menu_frame.lift()
+    reset_menu_layers()
     bg_frame.place(relwidth=1,relheight=1)
     pywinstyles.set_opacity(bg_frame, 0.8)
 
@@ -312,9 +313,10 @@ def close_delete_menu():
     root.after(400, maintain_library_aftermenu) #exactly 800
 
 def delete_song(name:str):
+    global PLAYING_INDEX
     '''FULLY remove a song, from the library and everythin'''
     if CURRENT_TRACKDATA:
-        if CURRENT_TRACKDATA[2] == name:
+        if os.path.basename(CURRENT_TRACKDATA[2]) == name:
             mixer.music.stop()
             mixer.music.unload()
 
@@ -334,6 +336,7 @@ def delete_song(name:str):
                 song_index = copy_directorys[directory].index(name)
                 song_directorys[directory].pop(song_index)
 
+    PLAYING_INDEX = None
     reload_all_lib_songs()
     load_song_library()
 
@@ -342,7 +345,7 @@ def delete_song(name:str):
 
 
 def delete_from_library_menu():
-    delete_song_title.configure(text=current_song_hover.replace(".mp3",""))
+    delete_song_title.configure(text=sanatize_UI_songname(current_song_hover))
     bg_frame.place(relwidth=1,relheight=1)
 
     bg_frame.lift()
@@ -415,7 +418,8 @@ def songframe_template(name):
     song_frame =  ctk.CTkFrame(root,width=300,height=40)
     image_label = ctk.CTkLabel(song_frame,width=300,height=40,text="")
 
-    title_label = ctk.CTkLabel(song_frame, text=f" {name.replace(".mp3","")} ", font=("Arial", 20, "bold"), image=None if valid_audio_name(name) and name != "<< Back" else folder_image,compound="right")
+    image = folder_image if valid_audio_name(name) == "dir" and name != "<< Back" else None
+    title_label = ctk.CTkLabel(song_frame, text=f" {sanatize_UI_songname(name)} ", font=("Arial", 20, "bold"), image=image,compound="right")
     
     image_label.place(relx=0.5, rely=0.5, anchor="center")
     title_label.place(relx=0.5, rely=0.5, anchor="center")
@@ -464,17 +468,21 @@ def rebind_all_songframes():
             image_label.bind("<Leave>", bind_leave_cursor)
             title_label.bind("<Leave>", bind_leave_cursor)
 
-def sanatize_system_songname(name): #every song stored inside the system should have a .mp3, it should only by removed when shown on the UI. 
+def sanatize_UI_songname(name):
     name = os.path.basename(name)
-    if ".mp3" in name:
-        striped_name = name[:-4]
-        name = striped_name + ".mp3"
-    else:
-        name = name + ".mp3"
+    head, _ = os.path.splitext(name)
+    return head
+
+def sanatize_imported_songname(name): #every song stored inside the system should have a .mp3, it should only by removed when shown on the UI. 
+    name = os.path.basename(name)
+
+    audio_status = valid_audio_name(name)
+    if not audio_status:
+        name += ".mp3"
     return name
 
 def lw_add_song(name, include_cdir=False): #im calling theese "lightweight" functions, they're designed to replace the constant full cache refresh that is currently used.
-    name = sanatize_system_songname(name)
+    name = sanatize_imported_songname(name)
     library_song_widget, label = library_song_ui_template(name)
     library_song_widget.pack()
 
@@ -485,7 +493,7 @@ def lw_add_song(name, include_cdir=False): #im calling theese "lightweight" func
     rebind_all_songframes()
 
 
-def lw_append_song_to_cdir(name): #im calling theese "lightweight" functions, they're designed to replace the constant full cache refresh that is currently used.
+def lw_append_song_to_cdir(name): 
     songframe, image_label, title_label = songframe_template(name)
 
     i = len(all_songs)
@@ -502,9 +510,7 @@ def lw_append_song_to_cdir(name): #im calling theese "lightweight" functions, th
     song_directorys[GLOBAL_MUSIC_DIR].append(name)
     song_directorys[GLOBAL_MUSIC_DIR].sort()
 
-    bg_frame.lift()
-    library_menu_frame.lift()
-    library_menu_button.lift()
+    reset_menu_layers()
 
 def direct_children(parent, paths):
     parent = Path(parent).resolve()
@@ -527,15 +533,29 @@ def get_song_list_from_dir(path:str):
 all_songs = []
 def compile_music_cache(): #CHANGE THIS
     music_dir = song_directorys[GLOBAL_MUSIC_DIR] #list of all song names in selected dir
+    all_songs.clear()
 
+    for songname in music_dir:
+        audio_type = valid_audio_name(songname)
+
+        if audio_type == "dir":
+            all_songs.append((Image.new("RGBA",size=(1,1)),None,songname,""))
+        elif audio_type:
+            all_songs.append(safeload_song(songname))
+
+
+"""
+all_songs = []
+def compile_music_cache(): #CHANGE THIS
+    music_dir = song_directorys[GLOBAL_MUSIC_DIR] #list of all song names in selected dir
     all_songs.clear()
 
     for songname in music_dir: # filter mp3
-        _, ext = os.path.splitext(songname) #gets the extention (.mp3, "" for direcotys)
-        if valid_audio_name(ext):
+        if valid_audio_name(songname):
             all_songs.append(safeload_song(songname))
-        if ext == "":
+        else:
             all_songs.append((Image.new("RGBA",size=(1,1)),None,songname,""))
+            """
 
 def show_console():
     ctypes.windll.kernel32.AllocConsole()
@@ -699,7 +719,9 @@ def reload_all_lib_songs():
 
     songs = os.listdir(music_path)
     for current_song in songs:
-        all_library_songs.append(current_song)
+        audio_status = valid_audio_name(current_song)
+        if audio_status != "dir" and audio_status:
+            all_library_songs.append(current_song)
 
 def download_youtube(url):
     yt_import_console.insert(ctk.END,"Starting download...")
@@ -719,7 +741,8 @@ def download_youtube(url):
         "js_runtime": f"deno:{deno_path}",
         "remote_components": ["ejs:github"],
         "progress_hooks": [download_progress_hook],
-        "noplaylist": not yt_playlist_check.get()
+        "noplaylist": not yt_playlist_check.get(),
+        "verbose": True
     }
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -845,7 +868,8 @@ def find_random_valid_song_in_dir(): #its messy- but still better then theoretic
     valid_dirs = []
     for song in all_songs:
         song_name = song[2]
-        if valid_audio_name(song_name) and song_name != current_song:
+        audio_status = valid_audio_name(song_name)
+        if audio_status != "dir" and audio_status and song_name != current_song:
             valid_dirs.append(song_name)
 
     if len(valid_dirs) < 1:
@@ -972,7 +996,6 @@ def tween_linear(start, end, t):
 def update_preview_tracktime(event=None):
     tracklenght = current_music_lenght//1000
 
-
     current_bookmark_tracktime = tween_linear(0,tracklenght,bookmark_track.get())
 
     bookmark_timestamp_preview.configure(text=f"{calulate_seconds_strtime(current_bookmark_tracktime)} / {calulate_seconds_strtime(tracklenght)}")
@@ -990,6 +1013,7 @@ def remove_timestamp(index):
     bookmarks[current_song]["timestamps"].pop(index)
     bookmarks[current_song]["names"].pop(index)
 
+    safe_save_appdata(bookmarks_path, json.dumps(bookmarks))
     reload_bookmark_manager_timestamps()
     reload_bookmarks()
 
@@ -1020,18 +1044,18 @@ def show_bookmark_manager():
         bookmark_menu.place(relwidth=1,relheight=1,rely=1)
         bookmark_menu.lift()
 
-        bookmark_target.configure(text=f" -  '{CURRENT_TRACKDATA[2].replace('.mp3',"")}'")
+        bookmark_target.configure(text=f" -  '{sanatize_UI_songname(CURRENT_TRACKDATA[2])}'")
         bookmark_track.set(timeline_slider.get())
       
         update_preview_tracktime()
         reload_bookmark_manager_timestamps()
-
 
         root.after(0,lambda: animate_open_menu(bookmark_menu,-1,0,True))
 
 
 def close_bookmark_manager():
     root.after(0,lambda: animate_close_menu(bookmark_menu,0,1,True))
+    bookmark_timestamp_preview.place_forget()
 
 def restore_default_settings():
     scroll_speed_slider.set(default_settings["scroll_speed"])
@@ -1067,8 +1091,8 @@ def toggle_libary_menu():
             bg_frame.lift()
             library_menu_frame.lift()
             library_menu_button.lift()
-            
-            
+
+            library_menu_seartch.focus()
 
     animate_library_menu_open()
 
@@ -1078,7 +1102,7 @@ def toggle_libary_menu():
         bg_frame.place_forget()
         close.place(relx=0.95,rely=0.01)
 
-def animate_library_menu_open(time=0): #help why is everyone so mad... its hard to focus
+def animate_library_menu_open(time=0): #
     if time < 50:
         time += 1
 
@@ -1094,7 +1118,7 @@ def animate_library_menu_open(time=0): #help why is everyone so mad... its hard 
 
         root.after(8,lambda:animate_library_menu_open(time))
 
-current_view_mode = "playlists"
+current_view_mode = "playlists" #playlists is the song scroller, home is recents
 save_playlist_view_directory = GLOBAL_MUSIC_DIR
 
 def find_first_song_origin(name):
@@ -1126,7 +1150,8 @@ def crop_square_image(img: Image.Image, size=120):
 def clean_directorys_from_sample(songs:list):
     results = []
     for song in songs:
-        if valid_audio_name(song):
+        song_status = valid_audio_name(song)
+        if song_status and song_status != "dir":
             results.append(song)
     return results
 
@@ -1157,10 +1182,10 @@ def load_recent_playlists():
     for i in range(len(recent_directorys)):
         current_playlist = recent_directorys[i]
         _, current_playlist_name = os.path.split(current_playlist)
-        current_playlist_name = current_playlist_name.replace(".mp3","") #sometimes the thing can glitch out and os.path.splitext returns none...
+        current_playlist_name = sanatize_UI_songname(current_playlist_name) #sometimes the thing can glitch out and os.path.splitext returns none...
         target_playlist_contents = clean_directorys_from_sample(song_directorys[current_playlist])
         
-        random.seed(seed) #cave jhonson here. the boys back at the lab said that this should get us into some for of "lock system"? Never sure what they're talkin about am i right ah ha.... uhhhggg but uhm anyways 
+        random.seed(seed) 
         song_image_index = random.randint(0,len(target_playlist_contents)-1) #this makes it so that the playlist icon ONLY changes when the progam is reloaded.
 
         target_song_name = target_playlist_contents[song_image_index]
@@ -1230,12 +1255,13 @@ def home_directory_viewer():
         #compile all_songs to be recent_songs, but the format should stay the same, theyre just rendered differently...
         all_songs.clear()
 
-        for songname in recent_songs: 
-            _, ext = os.path.splitext(songname) #gets the extention (.mp3, "" for directorys)
-            if valid_audio_name(ext):
-                all_songs.append(safeload_song(songname))
-            if ext == "":
+        for songname in recent_songs:
+            audio_status = valid_audio_name(songname)
+
+            if audio_status == "dir":
                 all_songs.append((Image.new("RGBA",size=(1,1)),None,songname,""))
+            elif audio_status:
+                all_songs.append(safeload_song(songname))
 
         reload_recents_directory_ui() #dont use regular GLOBAL_MUSIC_DIR
         songframe_option_button.place_forget()
@@ -1306,53 +1332,76 @@ external_song_import_youtube_button.place(relx=0.7,rely=0.85)
 
 external_import_menu.place(relx=0.1,relwidth=0.8,rely=1,relheight=0.8)
 
-def import_external_song(path,name):
-    if valid_audio_name(name):
+def import_external_song(path):
+    name = external_song_songtitle.get()
+    validity_status = valid_audio_name(name) #yes this is a word apparently
+    if validity_status:
         if all_songs == []:
             kickstart_song_systems()
 
         external_song_import_feedback.configure(text="")
-        fullname = sanatize_system_songname(name)
-        if name.get().strip() == "":
+        if name.strip() == "":
             external_song_import_feedback.configure(text="Song name cannot be empty.")
         else:    
+            _, tail = os.path.splitext(path)
+            fullname = name + tail
+
             try:
                 shutil.copy(path,os.path.join(music_path,fullname))
 
-                lw_add_song(fullname,external_song_add_to_cdir_check.get())
-                animate_close_menu(external_import_menu,0.1,1,True)
             except Exception as e:
                 external_song_import_feedback.configure(text=f"An error occurred: \n{e}")
+                return
+
+            lw_add_song(fullname,external_song_add_to_cdir_check.get())
+            animate_close_menu(external_import_menu,0.1,1,True)
+            
     else:
-        mb.showerror("Unsupported Media type",f"I'm really sorry, but Placeify does not yet provide support for a {name[-4:]} filetype yet!")
-        return
+        mb.showerror("Unsupported Media type",f"I'm really sorry, but Placeify does not yet provide support for a {os.path.splitext(name)[1]} filetype yet!")
+        return #this shouldn't happen since the openwith menu should only appear for the valid song types
 
 
 def open_import_menu(path:str): #called from mutinstance callback
     root.focus_force()
-    root.attributes("-topmost",True)
-    root.attributes("-topmost",False)
 
-    songname = os.path.splitext(os.path.basename(path))[0]
-    song = safeload_song(path,usedir=True)
+    if path == "ping":
+        return
 
-    external_song_image = ctk.CTkImage(crop_square_image(song[0],size=100),size=(100,100))
-    external_song_imagelabel.configure(image=external_song_image)
+    if os.path.exists(path):
+        root.focus_force()
+        root.attributes("-topmost",True)
+        root.attributes("-topmost",False)
 
-    external_song_songtitle.delete(0,ctk.END)
-    external_song_songtitle.insert(ctk.END,songname)
+        songname = os.path.splitext(os.path.basename(path))[0]
+        song = safeload_song(path,usedir=True)
 
-    external_song_songauthor.configure(text=song[3])
-    external_song_path.configure(text=path)
+        external_song_image = ctk.CTkImage(crop_square_image(song[0],size=100),size=(100,100))
+        external_song_imagelabel.configure(image=external_song_image)
 
-    external_song_import_youtube_button.configure(command=lambda:import_external_song(path,external_song_songtitle))
+        external_song_songtitle.delete(0,ctk.END)
+        external_song_songtitle.insert(ctk.END,songname)
 
-    bg_frame.place(relwidth=1,relheight=1)
-    close.place_forget()
+        external_song_songauthor.configure(text=song[3])
+        external_song_path.configure(text=path)
 
-    bg_frame.lift()
-    external_import_menu.lift()
-    animate_open_menu(external_import_menu,-1,0.1,True)
+        external_song_import_youtube_button.configure(command=lambda:import_external_song(path))
+
+        bg_frame.place(relwidth=1,relheight=1)
+        close.place_forget()
+
+        bg_frame.lift()
+        external_import_menu.lift()
+        animate_open_menu(external_import_menu,-1,0.1,True)
+    else:
+        mb.showerror("Non-existant File", f"The file '{path}' No longer exists.")
+
+def clear_recent_songs():
+    recent_songs.clear()
+    
+
+    clear_recent_playlists()
+    for songframe in recent_frames:
+        songframe.destroy()
     
 
 #-----------------------------------------------------------------------
@@ -1387,7 +1436,8 @@ library_menu_image = ctk.CTkImage(Image.open(resource_path("assets/libarary_menu
 library_menu_button = ctk.CTkButton(root,corner_radius=0,text="",image=library_menu_image,width=30,fg_color="#000000",height=69,hover_color="#2B2B2B",command=toggle_libary_menu)
 library_menu_button.place(x=0,y=0)
 
-homeframe, recent_songs_frame, recent_playlists_frame = home_ui.main(root)
+homeframe, recent_songs_frame, recent_playlists_frame, recent_clear_button = home_ui.main(root)
+recent_clear_button.configure(command=clear_recent_songs)
 ###---------------------------------------------------------------------------------
 ###BOTTOM OPTIONS BAR:  ------------------------------------------------------------------------
 
@@ -1457,7 +1507,9 @@ def export_song_directorys():
             for song in cdir_songs:
                 source_location = os.path.join(music_path,song)
                 export_location = os.path.join(target_export_directory,song)
-                if valid_audio_name(song):
+
+                audio_status = valid_audio_name(song)
+                if audio_status and audio_status != "dir":
                     try:
                         shutil.copy(source_location,export_location)
                     except:
@@ -1639,6 +1691,7 @@ library_song_menu.place(relwidth=1,relheight=0.8,y=60)
 
 def append_library_song_to_current_dir():
     lw_append_song_to_cdir(current_song_hover)
+    library_menu_button.lift()
 
 add_song_to_library_button = ctk.CTkButton(library_song_menu,text="➕",fg_color="#000000",text_color="#ffffff",width=30,corner_radius=15,hover_color="#a2a1a1",bg_color="#252525",command=append_library_song_to_current_dir) #radius is half the diameter- to half the width is the corner radius :DDD
 play_song_from_library_button = ctk.CTkButton(library_song_menu,text="▶️",fg_color="#000000",text_color="#ffffff",width=1,corner_radius=15,hover_color="#a2a1a1",bg_color="#252525",command=play_current_selected_library_song)
@@ -1665,7 +1718,7 @@ def add_bookmark():
                 bookmarks[i]["timestamps"].append(bookmark_track.get())
                 bookmarks[i]["names"].append(bookmark_name_entry.get())
 
-                print("appended bookmark")
+                safe_save_appdata(bookmarks_path, json.dumps(bookmarks))
                 
     else:
         bookmarks.append({
@@ -1688,8 +1741,8 @@ bookmark_title.place(x=15,y=15)
 bookmark_target = ctk.CTkLabel(bookmark_menu,text=f"'  -  {"if you're' seeing this, then i fricked something up"}'",font=("aeril",13,"bold"))
 bookmark_target.place(x=170,y=20)
 
-track_instuction = ctk.CTkLabel(bookmark_menu,text="Adjust the track for the position of this bookmark",font=("aeril",13,"bold"))
-track_instuction.place(relx=0.02,rely=0.3)
+track_instruction = ctk.CTkLabel(bookmark_menu,text="Adjust the track for the position of this bookmark",font=("aeril",13,"bold"))
+track_instruction.place(relx=0.02,rely=0.3)
 
 bookmark_track_frame = ctk.CTkFrame(bookmark_menu,height=50)
 bookmark_track_frame.place(relx=0.02,rely=0.4,relwidth=0.9)
@@ -1700,8 +1753,8 @@ bookmark_track.place(relx=0,rely=0.4,relwidth=1)
 bookmark_timestamp_preview = ctk.CTkLabel(bookmark_menu,text="345/345",font=("aeril",13,"bold"),fg_color="#202020",corner_radius=5,width=90)
 bookmark_timestamp_preview.place(relx=0.8,rely=0.3)
 
-bookmark_name_instuction = ctk.CTkLabel(bookmark_menu,text="Name your bookmark",font=("aeril",13,"bold"))
-bookmark_name_instuction.place(relx=0.02,rely=0.57)
+bookmark_name_instruction = ctk.CTkLabel(bookmark_menu,text="Name your bookmark",font=("aeril",13,"bold"))
+bookmark_name_instruction.place(relx=0.02,rely=0.57)
 
 bookmark_name_entry = ctk.CTkEntry(bookmark_menu,border_width=2)
 bookmark_name_entry.place(relx=0.02,rely=0.65,relwidth=0.9)
@@ -1728,7 +1781,7 @@ def add_music_menu():
     animate_open_menu(musicmenu,-1,0.1,True)
 
 def set_volume_slider(event=None):
-    mixer.music.set_volume(volume_slider.get()/2.5)
+    mixer.music.set_volume(volume_slider.get())
 
 volume_frame = ctk.CTkFrame(root,corner_radius=5,border_width=2,bg_color="#474747")
 volume_frame.place(relx=0,rely=0.565,relwidth=0.04,relheight=0.3)
@@ -1801,12 +1854,14 @@ def thread_download_yt(safe_url):
 
         if yt_playlist_check.get():
             entries = info.get("entries")
-            for entry in entries:
-                songname = entry.get("title")
-                songfile = songname+".mp3"
+            if entries:
+                for entry in entries:
+                    songname = entry.get("title")
+                    songfile = songname+".mp3"
 
-                lw_add_song(songfile,yt_add_to_cdir.get())
-                print(f"yt playlist import: {songfile}")
+                    lw_add_song(songfile,yt_add_to_cdir.get())
+            else:
+                lw_add_song(final_path,yt_add_to_cdir.get()) 
         else:
             lw_add_song(final_path,yt_add_to_cdir.get()) 
         
@@ -1817,8 +1872,7 @@ def thread_download_yt(safe_url):
     finally:
         import_youtube_button.configure(text="Import",state="normal")
 
-    with open(directorys_path, "w") as f:
-        f.write(json.dumps(song_directorys))
+    safe_save_appdata(directorys_path, json.dumps(song_directorys))
 
 def import_youtube():
     sus_url = yt_url_entry.get()
@@ -1862,7 +1916,7 @@ def create_dir():
         dir_status.configure(text="Directorys cannot contain a path defining character. (' / ') ",text_color="red")
         return 
 
-    song_directorys[target_name] = []
+    song_directorys[os.path.join(GLOBAL_MUSIC_DIR,target_name)] = []
     song_directorys[GLOBAL_MUSIC_DIR].append(target_name)
 
     reload_current_directory_ui()
@@ -2064,7 +2118,7 @@ def import_spotify_playlist():
                 spotify_download_status.configure(text=f"({i+1} / {len(playlist_contents)}) Downloading - '{current_song['title']}'",text_color="white")
                 root.update()
                 try:
-                    if not current_song["title"]+".mp3" in all_library_songs:
+                    if not current_song["title"]+".mp3" in all_library_songs: #ok so you can have 2 diff files w/ the same name but diff type and i guess thats okay
                         _, final_path = download_track_from_search(current_song["title"],current_song["artist"],music_path,ffmpeg_path) #heh.. i havent  heard  that name in   yeearrs son.  let me  tell  you a  bout a good ol   friend of mine,   gdir...
                         lw_add_song(os.path.basename(final_path), spotify_add_to_cdir_check.get()) 
                         
@@ -2195,22 +2249,24 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
     global current_music_lenght
     global seek_offset
 
-    # 1. datagrabbing
     if songdir == None:
         image, song_dir, name, uploader = all_songs[customindex]
     else:
         image, song_dir, name, uploader = safeload_song(songdir,usedir=True)
 
-    if song_dir:   
-        if os.path.exists(song_dir): #2. if video sill exists -video? wth are you talking about?
-            #3. setmusic player stuff ----------------------------------------
-            if not songdir == None: #if its a full dir
-                ext, tail = os.path.split(name)
-                name = tail
-
+    if song_dir:
+        if os.path.exists(song_dir): 
+            head, tail = os.path.splitext(name)
             CURRENT_TRACKDATA = (image,song_dir,name)
             mixer.music.load(song_dir)
-            current_music_lenght = MP3(song_dir).info.length * 1000 # seconds -> ms
+            
+            if tail == ".mp3":
+                current_music_lenght = MP3(song_dir).info.length * 1000 # seconds -> ms
+            elif tail == ".wav":
+                current_music_lenght = WAVE(song_dir).info.length * 1000 # seconds -> ms
+            elif tail == ".ogg":
+                current_music_lenght = OggVorbis(song_dir).info.length * 1000
+
             seek_offset = 0
             timeline_slider.set(0)
             manage_pause(customstate=False) # starts playback from seek_offset (0) and sets play_start_time
@@ -2218,7 +2274,8 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
             
             reload_bookmarks() # conveient lil guy, aint he?
             #title update-----------------------------------------------
-            song_title_text.configure(text=os.path.basename(name).replace(".mp3",""))
+            current_song_name = sanatize_UI_songname(name)
+            song_title_text.configure(text=current_song_name)
             song_creator_text.configure(text=uploader)
 
             #discord-----------------------------------------------
@@ -2227,7 +2284,7 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
 
             short_gdirname = f"{all_gdirnames[gdirlen-1]}"
 
-            details = truncate_string(f"{short_gdirname} / {name.replace(".mp3","")} ({uploader})")
+            details = truncate_string(f"{short_gdirname} / {current_song_name} ({uploader})")
 
             threading.Thread(target=update_presence,args=(details,"vibing to:")).start()
             root.update_idletasks()
@@ -2280,6 +2337,8 @@ def reload_recents_directory_ui(): #VERY DIFFERENT- USED ONLY FOR RECENT
     load_image_thread()   #apply thumbnail images
 
 def reload_current_directory_ui(): #very convient :D  normally global_music_dir is just changed globally externally so we can do whatever we want before hand and it adaps.. like... mahoraga..... yeh... im calling it that now
+    songframe_option_button.place_forget()
+    
     clear_songframes()    #destroy UI
     compile_music_cache() #recompile songs list
     create_songframes()   #create new UI
@@ -2302,16 +2361,13 @@ def bind_songframe_button_thing(selection_index):
         _, _, name, _ = all_songs[selection_index]
         print(f"request to play song {name}")
         if selection_index != PLAYING_INDEX:
-            if valid_audio_name(name):
-                FOCUS_INDEX = selection_index
-                PLAYING_INDEX = selection_index
-
-                select_song(selection_index)
-            else:#if its a directory
+            song_type = valid_audio_name(name)
+            if song_type == "dir":
                 future_dir = os.path.join(GLOBAL_MUSIC_DIR,name)
+
                 if not future_dir in song_directorys:
-                    print("directory missing endpoint, creating one...")
                     song_directorys[future_dir] = []
+                
                 GLOBAL_MUSIC_DIR = future_dir
                 FOCUS_INDEX = selection_index
                 PLAYING_INDEX = None
@@ -2320,7 +2376,11 @@ def bind_songframe_button_thing(selection_index):
                 FOCUS_INDEX = 0
                 
                 reload_current_directory_ui()
+            elif song_type:
+                FOCUS_INDEX = selection_index
+                PLAYING_INDEX = selection_index
 
+                select_song(selection_index)
 
 def bind_select_cursor(event=None):
     root.configure(cursor="hand2")
@@ -2332,17 +2392,19 @@ def remove_song_from_cdir():
     song_options_frame.place_forget()
     try:
         target_song = list(all_songs[songframe_option_index])
-        if not valid_audio_name(target_song[2]): #remove full directory
-            try:
-                song_directorys.pop(os.path.join(GLOBAL_MUSIC_DIR,target_song[2])) 
-            except:
-                pass
-            try:
-                song_directorys[GLOBAL_MUSIC_DIR].pop(song_directorys[GLOBAL_MUSIC_DIR].index(target_song[2]))
-            except:
-                pass
+        songname = target_song[2]
+        if valid_audio_name(target_song[2]) == "dir": #remove full directory
+                target_directory = os.path.join(GLOBAL_MUSIC_DIR,songname)
+
+                song_directorys.pop(target_directory) #remove folder
+                song_directorys[GLOBAL_MUSIC_DIR].pop(song_directorys[GLOBAL_MUSIC_DIR].index(songname)) #remove link
+
+                all_directorys = list(song_directorys.keys())
+                for cdir in all_directorys:
+                    if target_directory in cdir and target_directory != cdir: #if this cdir is a child of the target folder
+                        song_directorys.pop(cdir) #remove the child folder
         else:
-            song_index = song_directorys[GLOBAL_MUSIC_DIR].index(target_song[2]) #2: name
+            song_index = song_directorys[GLOBAL_MUSIC_DIR].index(songname) #2: name
             song_directorys[GLOBAL_MUSIC_DIR].pop(song_index)
 
             del target_song[0] #0: image, fully removed from memory
@@ -2355,13 +2417,23 @@ def remove_song_from_cdir():
     songframe_option_button.place_forget()
     rebind_all_songframes()
 
-def rename_song_from_entry(): #and now, i present to you.. a function, that... cant.. really.. fail....  (i was feeling nervious so i safegaruded the HELL outta ts)
+
+
+def rename_song_from_entry(): #nope it wasent apparently good enough.. NOW IT IS THOUGH!
     global song_directorys, all_library_songs, bookmarks
     original_name = all_songs[songframe_option_index][2]
-    newname = new_name_entry.get() 
+
+    original_status = valid_audio_name(original_name)
+    if original_status != "dir" and original_status:
+        newname = new_name_entry.get()+original_status
+    elif original_status == "dir":
+        newname = new_name_entry.get()
+    
     song_options_frame.place_forget()
 
     rename_status.configure(text="")
+
+    print(f"ORIGINAL NAME: {original_name}")
 
     should_restart_song = False
     if CURRENT_TRACKDATA: #if a song is loaded
@@ -2370,17 +2442,14 @@ def rename_song_from_entry(): #and now, i present to you.. a function, that... c
             mixer.music.unload()
             should_restart_song = True
 
-    if valid_audio_name(original_name):
-        if os.path.exists(os.path.join(music_path,original_name)): #check for OLD file
-            fname, ext = os.path.splitext(newname) # i know that the entry removes .mp3 but like someone might like i dunno od it anyways i dunno man
-            if ext != ".mp3":
-                newname += ".mp3"
 
-            if fname.strip() == "":
+    if original_status and original_status != "dir":
+        if os.path.exists(os.path.join(music_path,original_name)): #check for OLD file
+            if newname.strip() == "":
                 rename_status.configure(text="Cannot have empty name!")
                 return
 
-            if "/" in fname:
+            if "/" in newname:
                 rename_status.configure(text="Cannot contain directory determining characters")
                 return
 
@@ -2395,14 +2464,13 @@ def rename_song_from_entry(): #and now, i present to you.. a function, that... c
                 print(f"rename cancelled due to os error. (invalid, already taken, ect...)\n{e}")
                 return
 
-            #i actually made the following snippet durin school lunch...
             all_directorys = list(song_directorys.keys())
 
             for cdir in all_directorys: #change all references in song_directorys
-                files = song_directorys[cdir]
-                if original_name in files:
-                    target_file_index = files.index(original_name)
-                    song_directorys[cdir][target_file_index] = newname
+                for i in range(len(song_directorys[cdir])):
+                    current_songname = song_directorys[cdir][i]
+                    if current_songname == original_name:
+                        song_directorys[cdir][i] = newname
 
             for bookmark in bookmarks:
                 if bookmark["song"] == original_name:
@@ -2415,13 +2483,12 @@ def rename_song_from_entry(): #and now, i present to you.. a function, that... c
             all_library_songs[all_library_songs.index(original_name)] = newname
 
             load_song_library()
-
         else:
             print("rename failed due to nonexistsant file. song direcotry will be reserved though.")
 
         if should_restart_song:
             restart_current_song() #i mean i could save where we were but uh... nah
-    else:
+    elif original_status == "dir":
         if newname.strip() == "":
             rename_status.configure(text="Cannot have empty name!")
             return
@@ -2437,12 +2504,31 @@ def rename_song_from_entry(): #and now, i present to you.. a function, that... c
         if dir_exists(newname):
             rename_status.configure(text="Directory already exists!")
             return
-        
-        
-        song_directorys[GLOBAL_MUSIC_DIR][song_directorys[GLOBAL_MUSIC_DIR].index(original_name)] = newname #replace direcotry "link"
-        song_directorys[os.path.join(GLOBAL_MUSIC_DIR,newname)] = song_directorys.pop(os.path.join(GLOBAL_MUSIC_DIR,original_name)) 
 
-    rebind_all_songframes()
+        all_directorys = list(song_directorys.keys())
+        for i in range(len(all_directorys)):
+            cdir = all_directorys[i]
+            testname = os.path.basename(cdir)
+
+            if testname == original_name:
+                contentsave = song_directorys[cdir]
+
+                song_directorys.pop(cdir)                                             #remove the folder
+                song_directorys[os.path.join(GLOBAL_MUSIC_DIR,newname)] = contentsave #make a new one with same contents
+
+                song_directorys[GLOBAL_MUSIC_DIR][song_directorys[GLOBAL_MUSIC_DIR].index(original_name)] = newname #rename the link
+
+
+        #update the child folders to link to that same dir
+        orig_full = os.path.join(GLOBAL_MUSIC_DIR,original_name)
+        for i in range(len(all_directorys)):
+            cdir = all_directorys[i]
+            if orig_full in cdir and orig_full != cdir: #if this cdir is a child of the target folder
+                contentsave = song_directorys[cdir] #save what was in it
+
+                song_directorys.pop(cdir)                                             #remove the folder
+                song_directorys[cdir.replace(original_name,newname)] = contentsave #make a new one with same contents, but new dir
+
     reload_current_directory_ui() #reload the UI with the new data.
     close_rename_menu()
 
@@ -2499,13 +2585,15 @@ cancel_delete_btn.place(rely=0.88,relx=0.02)
 delete_song_btn.place(rely=0.88,relx=0.62)
 
 def open_rename_menu():
+    sanatized_name = sanatize_UI_songname(all_songs[songframe_option_index][2])
+
     old_name_entry.configure(state="normal")
     old_name_entry.delete(0,ctk.END)
-    old_name_entry.insert(0,all_songs[songframe_option_index][2].replace(".mp3",""))
+    old_name_entry.insert(0,sanatized_name)
     old_name_entry.configure(state="disabled")
 
     new_name_entry.delete(0,ctk.END)
-    new_name_entry.insert(0,all_songs[songframe_option_index][2].replace(".mp3",""))
+    new_name_entry.insert(0,sanatized_name)
 
     bg_frame.place(relwidth=1,relheight=1)
     close.place_forget() #so uh we kinda gotta hide just for this menu cuz its for something else but like why did i call it this? im not gonna change it but this seriously didnt like interfere with anything?
@@ -2543,14 +2631,28 @@ def song_options_menu_summon():
 songframe_option_index = None #the assigned index
 songframe_option_button = ctk.CTkButton(root,text="",image=more_options_image,fg_color="#000000",width=30,hover_color="#0c0c0c",command=song_options_menu_summon)
 
+def reset_menu_layers():
+    bottom_options_bar.lift()
+    bottom_timeline_bar.lift()
+    volume_frame.lift()
+    song_title_text.lift()
+    song_creator_text.lift()
+    library_menu_button.lift()
+    directory_view_frame.lift()
+    songframe_option_button.lift()
+
+    bg_frame.lift()
+    close.lift()
+    
+    musicmenu.lift()
+    library_menu_frame.lift()
+    external_import_menu.lift()
 
 def enter_songframe(event=None, index=None): #assign the option menu to a index, will be updated with update_songframes
     global songframe_option_index
     songframe_option_index = index
 
-    songframe_option_button.lift()
-    bottom_options_bar.lift()
-    bottom_timeline_bar.lift()
+    reset_menu_layers()
 
     song_options_frame.place_forget()
 
@@ -2578,7 +2680,7 @@ def create_recents_songframes(spaceing=10):
     for i in range(len(all_songs)): #use the filtered one
         _,_,songname, _ = all_songs[i]
 
-        songlabel = ctk.CTkLabel(recent_songs_frame, text=(songname.replace(".mp3","")+("" if valid_audio_name(songname) else "   ")), font=("Arial", 20, "bold"), image=None if valid_audio_name(songname) else folder_image,corner_radius=5,fg_color="#2B2B2B",width=625,anchor="w")
+        songlabel = ctk.CTkLabel(recent_songs_frame, text=sanatize_UI_songname(songname), font=("Arial", 20, "bold"), corner_radius=5,fg_color="#2B2B2B",width=625,anchor="w")
         songlabel.pack(padx=10,pady=5,anchor="w")
         
         recent_frames.append(songlabel) 
@@ -2590,7 +2692,7 @@ def create_recents_songframes(spaceing=10):
         songlabel.bind("<Enter>", lambda event, widget=songlabel: hover_enter_recent_songframe(widget))
         songlabel.bind("<Leave>",  lambda event, widget=songlabel: hover_leave_recent_songframe(widget))
 
-def create_songframes(spaceing=10):  
+def create_songframes():  
     for i in range(len(all_songs)): #use the filtered one
         _,_,songname, _ = all_songs[i]
 
@@ -2623,18 +2725,7 @@ def create_songframes(spaceing=10):
         back_image_label.bind("<Leave>", bind_leave_cursor)
         back_title_label.bind("<Leave>", bind_leave_cursor)
 
-    bg_frame.lift()
-
-    bottom_options_bar.lift()
-    bottom_timeline_bar.lift()
-
-    song_title_text.lift()
-    song_creator_text.lift()
-    library_menu_button.lift()
-    directory_view_frame.lift()
-
-    library_menu_frame.lift()
-    external_import_menu.lift()
+    reset_menu_layers()
 
     
 
@@ -2662,6 +2753,7 @@ def create_songframes(spaceing=10):
 
 #edit: somehow- os.walk fits this format like... perfectly.... what.
 #edit #2 - we cant actually do that second list thing you BAFOON. haveing an entire list containing EACH DIRECTORY??? DO YOU KNOW HOW EXPENSIVE THAT WOULD BE??? NO??   VERY.    VERY EXPENSIVE.
+
 def get_average_color(img: Image.Image):
     small = img.resize((1, 1), Image.Resampling.LANCZOS)
     return small.getpixel((0, 0))
@@ -2734,34 +2826,42 @@ def scroll_wheel(event):
     # update button color           - what was this for again?   i forgot.. 
     #huh- like 5 versions later and i remembered.   wait- no i don't.. why am i writing this
 
-def animate_widget_x(widget, start, end, time=0,duration=50):
+def animate_widget_x(widget, start, end, target_state=None, time=0,duration=50):
     if time <= duration:
+        if target_state != focus_step:
+            widget.place(x=end)
+            return
+        
         widget.place(x=cubic_out(time/duration,start,end))
         
         time += 1
-        root.after(16,lambda:animate_widget_x(widget, start, end, time, duration))
+        root.after(16,lambda:animate_widget_x(widget, start, end, target_state, time, duration))
 
 def focus_animation(focused):
     if focused:
-        animate_widget_x(bottom_options_bar,-300,0)
-        animate_widget_x(bottom_timeline_bar,-390,0)
-        animate_widget_x(volume_frame,-40,0)
+        animate_widget_x(bottom_options_bar,-300,0, focus_step)
+        animate_widget_x(bottom_timeline_bar,-390,0, focus_step)
+        animate_widget_x(volume_frame,-40,0, focus_step)
 
         if current_view_mode == "playlists":
-            animate_widget_x(song_title_text,-730,30)
-            animate_widget_x(song_creator_text,-730,30)
-            animate_widget_x(library_menu_button,-30,0)
-        animate_widget_x(directory_view_frame,200,30)
+            animate_widget_x(song_title_text,-730,30, focus_step)
+            animate_widget_x(song_creator_text,-730,30, focus_step)
+            if not library_open:
+                animate_widget_x(library_menu_button,-30,0, focus_step)
+
+        animate_widget_x(directory_view_frame,200,30, focus_step)
     else:
-        animate_widget_x(bottom_options_bar,0,-300)
-        animate_widget_x(bottom_timeline_bar,0,-390)
+        animate_widget_x(bottom_options_bar,0,-300, focus_step)
+        animate_widget_x(bottom_timeline_bar,0,-390, focus_step)
         animate_widget_x(volume_frame,0,-40)
 
         if current_view_mode == "playlists":
-            animate_widget_x(song_title_text,30,-730)
-            animate_widget_x(song_creator_text,30,-730)
-            animate_widget_x(library_menu_button,0,-30)
-        animate_widget_x(directory_view_frame,30,200)
+            animate_widget_x(song_title_text,30,-730, focus_step)
+            animate_widget_x(song_creator_text,30,-730, focus_step)
+            if not library_open:
+                animate_widget_x(library_menu_button,0,-30, focus_step)
+
+        animate_widget_x(directory_view_frame,30,200, focus_step)
 
 def calulate_seconds_strtime(seconds):
     seconds = int(seconds)
@@ -2829,6 +2929,7 @@ def hide_console():
 
 
 def keyrelease(event):
+    global focus_step
     key = event.keysym
     #print(key) #uncomment if you want the keycodes
 
@@ -2845,7 +2946,10 @@ def keyrelease(event):
         if key == "Tab" and current_view_mode == "playlists":
             toggle_libary_menu()
         if key == "h":
-            focus_animation(focused=False) #im not telling anyone about this until im not lazy enought to toggle or add more support for it
+            if focus_step == "focused":
+                focus_animation(focused=False) 
+
+
 
     if key == "7":
         show_console()
