@@ -1,17 +1,18 @@
-Placeify is an **lightweight**, open‑source music player that lets you import songs straight from YouTube using yt‑dlp, then listen offline with **zero ads**, **clean UI**, **thumbnails**, **playlists**, and more.
+Placeify is a free, open-source music player that lets you import songs directly from YouTube and Spotify, then listen to them offline without ads, buffering, subscriptions, or other nonsense.
+
 
 Features:
-
-    - ⬇️ Import music from YouTube links
-    - 📵 Offline playback (no ads, no buffering)
-    - 📂 Custom directories (playlists/albums)
-    - 🔀 Shuffle + loop
-    - ➡️ Next/previous track
-    - 🖼️ Thumbnail support
-    - 🫧 Clean, modern UI with VERY cool animations
-    - 🔧 Fully open‑source
-    - 🪟 Windows EXE build available (no linux, sorry)
-
+---
+- ⬇️ Import music from YouTube or Spotify Links
+- 📵 Offline playback (no ads, no buffering)
+- 📂 Custom directories (playlists/albums)
+- 🔀 Shuffle + loop
+- ➡️ Next/previous track
+- 🖼️ Thumbnail support
+- 🫧 Clean, modern UI with VERY cool animations
+- 🔧 Fully open‑source
+- 🪟 Windows EXE build available (no linux, sorry)
+- AND MORE!!!!!!
 -------------------------------------------------------------------------------
 **HOW TO USE**
 -------------------------------------------------------------------------------
@@ -22,59 +23,69 @@ Features:
   
   1. Open `placeify.exe`
   2. Click the + button
-  3. Paste a YouTube link
+  3. Paste a YouTube, or Spotify playlist/URL (it MUST BE PUBLIC!!!) 
   4. Hit Import
-  5. Enjoy your music offline
+  5. Enjoy!!!
   
   You can also create folders (playlists) using the folder icon.
-  Folders can even contain other folders — go crazy with that one.
+  Since Placeify uses a subdirectory system, playlists can be inside playlists, inside playlists, inside playlists, inside playlists, inside playlists, inside playli
+
+  I recommend placing the EXE into the appdata folder that Placeify makes, but thats just me ig...
 
 -------------------------------------------------------------------------------
 
-🧑‍💻**DEVELOPERS** (if you want to edit it)
+🧑‍💻**Running the source code** 
 
 Placeify is written entirely in Python.
 If you want to run main.py, you’ll need these dependencies installed:
 
-    - customtkinter
-    - pillow
-    - pygame
-    - yt-dlp
-    - pypresence
-    - pywinstyles
-    - asyncio
-    - mutagen
-    - io (BytesIO)
-    - ffmpeg (external)
-    - ffprobe (external)
-    
 
-Once installed simply, run:
+| Library Name | Purpose |
+|--|--|
+| `customtkinter` | Graphics Library |
+| `pillow` | Image Management / Editing |
+| `pygame` | Music Player |
+| `yt-dlp` | Audio Downloading |
+| `pypresence` | Discord Rich Presence (optional, dont worry.) |
+| `pywinstyles` | Extra UI effects (Opacity support for `ctk`) |
+| `mutagen` | ID3 Tag Management (Title, Author, Image) |
 
-`main.py`
 
-**⚠️⚠️IMPORTANT⚠️⚠️**
+📦**External Dependancies**
+| Binary Name | Purpose |
+|--|--|
+| `ffmpeg` | Used for thumbnail embedding and formatting |
+| `Deno` | Used for YouTube JS resolving |
 
-You **NEEEEEED** **FFMPEG** IN YOUR LOCAL DIRECTORY.
+Once installed, simply drop these into:
+```directory or seomthing
+assets/downloading
+```
 
-You can find it here: 
-
-https://github.com/GyanD/codexffmpeg/releases
-
-Look for the latest build
+Then, you can finally run `main.py`
 
 -------------------------------------------------------------------------------
 📜**LICENSE**
 
-Placeify uses the **MIT License**, partially so that you can use it, and so that I don't get sued if something doesn't work.
+Placeify is released under the **MIT License**, meaning you can use it, modify it, and distribute it!
+
+It also means I'm not the one responsible if it explodes and bricks your pc
+
+
 You can find that in the `LICENSE` file or in the "License" section on the repository page.
 
 -------------------------------------------------------------------------------
 🪳**BUGS AND ERRORS**
 
-Although most bugs have been sorted out, there are still many chances that there are more to find. If you found any, please let me know!
-Or if anything looks off- press "7" and check the console. You might need to try and replicate the bug in order to find it again though...
+Even though most bugs and errors have been sorted out, there are still always things that can go wrong! If you notice anything, then do the following:
 
-I also apologize in advance, I know that the engine is just 700 (edit: 1400) lines of spaghetti, and I don't know how to structure it and I WILL reformat it later I swear
+
+1.  Press **7** to open the debug console.
+2.  Try to reproduce the issue.
+3.  Open an issue on GitHub.
+4.  Include any useful logs.
+
+also, please don't report that the codebase is ugly, trust me,
+**i know.**
 
 ![Project Logo](./assets/placeify.png)
