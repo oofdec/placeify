@@ -11,10 +11,11 @@ def server_manager(s,add_song_callback):
         try:
             cli, _ = s.accept()
 
-            path = cli.recv(1024).decode()
-            print("receiveing signal to add path:"+path)
+            cmd = cli.recv(1024).decode()
+            if os.path.exists(cmd):
+                print("receiveing signal to add path:"+cmd)
+                add_song_callback(cmd)
 
-            add_song_callback(path)
             cli.close()
         except socket.timeout:
             pass
