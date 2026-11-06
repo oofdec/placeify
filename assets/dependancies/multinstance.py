@@ -1,4 +1,4 @@
-import sys, threading
+import sys, os, threading
 import socket
 
 running = True
@@ -15,6 +15,8 @@ def server_manager(s,add_song_callback):
             if os.path.exists(cmd):
                 print("receiveing signal to add path:"+cmd)
                 add_song_callback(cmd)
+            else:
+                add_song_callback("ping")
 
             cli.close()
         except socket.timeout:
@@ -39,6 +41,11 @@ def main(app_arguments, add_song_callback):
 
     #check for exit first
     if not s and not openwith: #if server is already running, and not opened with
+        s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        s.settimeout(1)
+
+        s.connect(("localhost",58391))
+        s.send("ping".encode())
         sys.exit(-1)
 
 
