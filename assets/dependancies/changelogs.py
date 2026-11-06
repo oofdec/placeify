@@ -6,9 +6,9 @@ import win32com.client
 from pathlib import Path
 
 
-CHANGELOG_CODE = "V12R"
+CHANGELOG_CODE = "V14R"
 APP_NAME = "Placeify"
-AUDIO_EXTS = (".mp3", ".wav", ".flac", ".ogg")
+AUDIO_EXTS = (".mp3", ".wav", ".ogg")
 
 
 def make_shortcut(target, icon=None, name=APP_NAME):
