@@ -21,7 +21,7 @@ import requests
 from yt_dlp.utils import sanitize_filename
 
 import io
-import os, sys
+import os, sys, gc
 from pathlib import Path
 import threading
 
@@ -74,7 +74,9 @@ default_settings = {
                     "img_que":False,
                     "console_startup":False,
                     "version":APP_VERSION,
-                    "openwidth_assigned":False
+                    "openwidth_assigned":False,
+                    "volume":0.5,
+                    "strip_images":True
                     }
 
 bookmarks = []
@@ -210,48 +212,6 @@ def valid_audio_name(name):
     else:
         return False
 
-def load_image_thread():
-    global all_songs
-    root.configure(cursor="watch")
-    root.update()
-
-    if safe_settings_grab("load_imgs") == 1: #if we want thumbnails at all
-        starting_directory = GLOBAL_MUSIC_DIR
-
-        for i in range(len(all_songs)):
-            if starting_directory == GLOBAL_MUSIC_DIR: #make sure they didnt click off, if so, CANCEL ITTTT
-                current_song_name = list(all_songs[i])[2]      #god my hate for tuples will never be matched.   WHY AM I STILL USEING THEM?????
-        
-                if valid_audio_name(current_song_name) :
-                    current_songdir = os.path.join(music_path,current_song_name)
-            
-                    image_data = None
-                    try:
-                        audio = ID3(current_songdir)
-                        
-                        for tag in audio.values():
-                            if tag.FrameID == "APIC":
-                                image_data = tag.data
-                                break
-                    except Exception:
-                        pass                                                                     
-
-                    if image_data:
-                        img = Image.open(io.BytesIO(image_data))
-
-                        songdata = list(all_songs[i])
-                        songdata[0] = img
-                        all_songs[i] = tuple(songdata)
-            else:  #wrong indent   -   why did i write this? what dose this even mean? what?
-                return   #canel if dir changes while loading images
-    else:
-         for i in range(len(all_songs)):
-            current_song = list(all_songs[i])
-            current_song[0] = Image.new("RGBA",(1,1))
-
-            all_songs[i] = tuple(current_song)
-            song_frames[i][1].image_loaded = True
-    root.configure(cursor="arrow")
                 
 def safeload_song(name, usedir=False):
     if usedir:
@@ -283,7 +243,7 @@ def safeload_song(name, usedir=False):
     except Exception as e:
         print(f"failed to grab song {name} due to the following exception: {e}")
         image_data = Image.new("RGB",(1,1),"#1E0000")
-    return image_data, song_dir, name, uploader
+    return [image_data, song_dir, name, uploader]
 
 def safe_settings_grab(name):
     if name in saved_settings:
@@ -348,8 +308,7 @@ def delete_from_library_menu():
     delete_song_title.configure(text=sanatize_UI_songname(current_song_hover))
     bg_frame.place(relwidth=1,relheight=1)
 
-    bg_frame.lift()
-    delete_frame.lift()
+    reset_menu_layers()
 
     close.place_forget()
 
@@ -531,17 +490,34 @@ def get_song_list_from_dir(path:str):
     return result
 
 all_songs = []
-def compile_music_cache(): #CHANGE THIS
+def compile_music_cache(): 
     music_dir = song_directorys[GLOBAL_MUSIC_DIR] #list of all song names in selected dir
+    songlenght = len(music_dir) #i reuse this anyways so
     all_songs.clear()
 
-    for songname in music_dir:
+    root.configure(cursor="watch")
+
+    loading_progress.place(relwidth=1,x=0,y=0)
+    loading_progress.lift()
+    for i in range(songlenght):
+        songname = music_dir[i]
         audio_type = valid_audio_name(songname)
 
         if audio_type == "dir":
             all_songs.append((Image.new("RGBA",size=(1,1)),None,songname,""))
         elif audio_type:
+            song_data = safeload_song(songname)
+
+            if safe_settings_grab("strip_images"):
+                song_data[0] = strip_songframe_image(song_data[0])
+
             all_songs.append(safeload_song(songname))
+
+        loading_progress.set((i+1)/songlenght)
+        root.update()
+        
+    root.configure(cursor="arrow")
+    loading_progress.place_forget()
 
 
 """
@@ -953,7 +929,6 @@ def show_settings_menu():
     settmenu.place(relwidth=1,relheight=1,rely=1)
     settmenu.lift()
 
-
     root.after(0,lambda: animate_open_menu(settmenu,-1,0,True))
 
 def close_focus_menus():
@@ -976,7 +951,9 @@ def save_settings():
         "console_startup":show_console_startup.get(),
         "infobar_opacity":infobar_opacity_slider.get(),
         "version":default_settings["version"],
-        "openwidth_assigned":openwith_menu_check.get()
+        "openwidth_assigned":openwith_menu_check.get(),
+        "volume":volume_slider.get(),
+        "strip_images":strip_thumbnails_check.get()
         }
     print(saved_settings)
     try:
@@ -1066,7 +1043,12 @@ def restore_default_settings():
     use_thumbnails_check.select() if default_settings["load_imgs"] else use_thumbnails_check.deselect()
     show_console_startup.select() if default_settings["console_startup"] else show_console_startup.deselect()
     openwith_menu_check.select() if default_settings["openwidth_assigned"] else openwith_menu_check.deselect()
+    strip_thumbnails_check.select() if default_settings["strip_images"] else strip_thumbnails_check.deselect()
 
+    update_strip_thumbnails_warning()
+    update_bluramount_text()
+    update_infobar_opacity()
+    update_scrollspeed_text()
 
 library_loaded = False
 library_open = False
@@ -1438,6 +1420,8 @@ library_menu_button.place(x=0,y=0)
 
 homeframe, recent_songs_frame, recent_playlists_frame, recent_clear_button = home_ui.main(root)
 recent_clear_button.configure(command=clear_recent_songs)
+
+loading_progress = ctk.CTkProgressBar(root,corner_radius=0,progress_color="#F36629",fg_color="#000000",height=5) #about as orange as orange can get lol
 ###---------------------------------------------------------------------------------
 ###BOTTOM OPTIONS BAR:  ------------------------------------------------------------------------
 
@@ -1561,6 +1545,32 @@ bg_blur_title.pack(anchor="w")
 bg_blur_slider = ctk.CTkSlider(settmenu,width=600,command=update_bluramount_text,from_=0.01, to=0.35)
 bg_blur_slider.pack(anchor="w")
 bg_blur_slider.set(safe_settings_grab("blur_amount"))
+
+def update_strip_thumbnails_warning():
+    global saved_settings
+    saved_settings["strip_images"] = strip_thumbnails_check.get() #i lowk forgot how i did this before but i mean both work soooo
+    if strip_thumbnails_check.get():
+        stip_thumbnails_info_text.configure(text="Loading playlists will take longer, however, more memory will be saved.")
+        stip_thumbnails_info_title.configure(text="Memory Saver", text_color="#58FF3E")
+    else:
+        stip_thumbnails_info_text.configure(text="Loading playlists will be quicker, however, more memory will used.")
+        stip_thumbnails_info_title.configure(text="Preformance Mode", text_color="#FFF93E")
+
+strip_thumbnails_check = ctk.CTkCheckBox(settmenu,text=f"Strip Thumbnails",font=("aeril",19,"normal"),command=update_strip_thumbnails_warning)
+strip_thumbnails_check.pack(anchor="w",pady=10)
+if safe_settings_grab("strip_images"):
+    strip_thumbnails_check.select()
+
+strip_thumbnails_info_frame = ctk.CTkFrame(settmenu,fg_color="#191919",width=680,height=65) #i am currently stuck listening to theese damn youtube ads while i fix my own music app.
+strip_thumbnails_info_frame.pack()
+
+stip_thumbnails_info_title = ctk.CTkLabel(strip_thumbnails_info_frame,text="undetermined",font=("aeril",16,"bold"))
+stip_thumbnails_info_title.place(x=10,y=2)
+
+stip_thumbnails_info_text = ctk.CTkLabel(strip_thumbnails_info_frame,text="undetermined",font=("aeril",16,"normal"))
+stip_thumbnails_info_text.place(x=10,y=28)
+
+update_strip_thumbnails_warning()
 
 #lowk useless and didnt work so uh..        deprecated lmao
 #img_load_meathod_title = ctk.CTkLabel(settmenu,text=f"Thumbnail loading method:",font=("aeril",19,"normal"))
@@ -1776,8 +1786,7 @@ def add_music_menu():
                 rely=1,relheight=0.8)
     close.place(relx=0.95,rely=0.01)
 
-    bg_frame.lift()
-    musicmenu.lift()
+    reset_menu_layers()
     animate_open_menu(musicmenu,-1,0.1,True)
 
 def set_volume_slider(event=None):
@@ -1788,7 +1797,7 @@ volume_frame.place(relx=0,rely=0.565,relwidth=0.04,relheight=0.3)
 
 volume_slider = ctk.CTkSlider(volume_frame,orientation="vertical",command=set_volume_slider)
 volume_slider.place(relx=0.2,rely=0.02,relheight=0.95)
-volume_slider.set(0.55)
+volume_slider.set(safe_settings_grab("volume"))
 set_volume_slider()
 
 add_music_butt = ctk.CTkButton(bottom_options_bar,fg_color="#2B2B2B",hover_color="#1a1a1a",text="➕",width=25,command=add_music_menu)
@@ -1805,9 +1814,6 @@ def profile_import_menu(menu_obj):
     yt_import_frame.place_forget()
     create_directory_frame.place_forget()
 
-    bg_frame.lift()
-    musicmenu.lift()
-
     if menu_obj is yt_import_frame:
         yt_import_frame.place(relx=0,rely=0.12,relwidth=1,relheight=0.88)
         from_yt_button.configure(fg_color="#0A0A0A")
@@ -1818,6 +1824,7 @@ def profile_import_menu(menu_obj):
         spotify_import_frame.place(relx=0,rely=0.12,relwidth=1,relheight=0.88)
         from_spotify_button.configure(fg_color="#0A0A0A")
 
+    reset_menu_layers()
 ######  YOUTUBE
     
 from_yt_button = ctk.CTkButton(musicmenu,text="YouTube Download",border_width=1.5,fg_color="#2B2B2B",border_color="#666666",hover_color="#1a1a1a",font=("areil",16,"bold"),command=lambda:profile_import_menu(yt_import_frame))
@@ -2148,8 +2155,8 @@ def import_spotify_playlist():
     spotify_import_frame.lift()
     is_downloading = False
 
-    with open(directorys_path, "w") as f:
-        f.write(json.dumps(song_directorys))
+    safe_save_appdata(directorys_path,json.dumps(song_directorys))
+    reset_menu_layers()
 
 spotify_import_youtube_button = ctk.CTkButton(spotify_import_frame,text="Import",width=80,height=26,border_width=1,fg_color="#2B2B2B",hover_color="#1a1a1a",command=toggle_spotify_download,font=("Inter",14,"bold"))
 spotify_import_youtube_button.place(relx=0.05,rely=0.65,relwidth=0.55)
@@ -2320,21 +2327,33 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
     apply_playoffset_tween() #animate the bounce :D
 
 def clear_songframes():
+    for i in range(len(all_songs)):
+        song = list(all_songs[i])
+
+        if isinstance(song[0], Image.Image):
+            song[0].close()
+
+        song[0] = None
+        all_songs[i] = tuple(song)
+
     for i in range(len(song_frames)):
         if len(song_frames[i]) == 3:
             image_label = song_frames[i][1]
-
+            
             if image_label.cget("image"):
                 del image_label._image # found you. 
+                image_label.ctkimage = None
+
         song_frames[i][0].destroy() 
     song_frames.clear()
+
+    gc.collect()
 
 
 def reload_recents_directory_ui(): #VERY DIFFERENT- USED ONLY FOR RECENT
     clear_songframes()    #destroy UI
     #compile_music_cache() #songs are compiled differnetly for recents.
     create_recents_songframes()   #create new UI - but for the home menu lol
-    load_image_thread()   #apply thumbnail images
 
 def reload_current_directory_ui(): #very convient :D  normally global_music_dir is just changed globally externally so we can do whatever we want before hand and it adaps.. like... mahoraga..... yeh... im calling it that now
     songframe_option_button.place_forget()
@@ -2342,7 +2361,6 @@ def reload_current_directory_ui(): #very convient :D  normally global_music_dir 
     clear_songframes()    #destroy UI
     compile_music_cache() #recompile songs list
     create_songframes()   #create new UI
-    load_image_thread()   #apply thumbnail images
 
 def bind_songframe_button_thing(selection_index):
     global FOCUS_INDEX
@@ -2584,6 +2602,12 @@ delete_song_btn = ctk.CTkButton(delete_frame,text="Delete",border_width=1,border
 cancel_delete_btn.place(rely=0.88,relx=0.02)
 delete_song_btn.place(rely=0.88,relx=0.62)
 
+def strip_songframe_image(img, STRIP_W=300, STRIP_H=40):
+    w, h = img.size
+    left = max(0, (w - STRIP_W) // 2)
+    top = max(0, (h - STRIP_H) // 2)
+    return img.crop((left, top, left + STRIP_W, top + STRIP_H)).convert("RGB")
+
 def open_rename_menu():
     sanatized_name = sanatize_UI_songname(all_songs[songframe_option_index][2])
 
@@ -2597,8 +2621,9 @@ def open_rename_menu():
 
     bg_frame.place(relwidth=1,relheight=1)
     close.place_forget() #so uh we kinda gotta hide just for this menu cuz its for something else but like why did i call it this? im not gonna change it but this seriously didnt like interfere with anything?
-    bg_frame.lift()
-    rename_frame.lift()
+
+    reset_menu_layers()
+    
     animate_open_menu(rename_frame,-0.5,0.2,True)
 
 song_options_rename = ctk.CTkButton(song_options_frame,text="✏️ Rename",width=90,fg_color="#000000",hover_color="#151515",command=open_rename_menu)
@@ -2647,6 +2672,8 @@ def reset_menu_layers():
     musicmenu.lift()
     library_menu_frame.lift()
     external_import_menu.lift()
+
+    #loading_progress.lift() id's rather this only appear when its loading
 
 def enter_songframe(event=None, index=None): #assign the option menu to a index, will be updated with update_songframes
     global songframe_option_index
@@ -2973,9 +3000,11 @@ root.bind("<KeyRelease>",keyrelease)
 def kickstart_song_systems():
     root.after(0,create_songframes)
     root.after(1,interpolate_render_index)
-    root.after(0,load_image_thread)
 
 init_passes()
+
+reload_all_lib_songs()
+compile_music_cache()
 
 if is_new_user:
     startingtext = ctk.CTkLabel(root,text="Welcome to Placeify! To get started, click  on the '+' button!") #eh ill do this later
@@ -2985,8 +3014,7 @@ if is_new_user:
 else:
     kickstart_song_systems()
 
-reload_all_lib_songs()
-compile_music_cache()
+
 
 root.mainloop()
 
