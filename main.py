@@ -76,7 +76,7 @@ default_settings = {
                     "version":APP_VERSION,
                     "openwidth_assigned":False,
                     "volume":0.5,
-                    "strip_images":True
+                    "strip_images":False
                     }
 
 bookmarks = []
