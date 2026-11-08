@@ -41,7 +41,7 @@ import assets.dependancies.ui.home_ui as home_ui
 import assets.dependancies.multinstance as mutinstance
 
 # HIGHEST PRIORITY:
-
+    #add option for crop image, resize, or None
 
 # SECOND PRIORITY
     #add a "..." button to the library menu, make it contain delete and renameing functions.
@@ -64,7 +64,7 @@ def init_passes():
         CREATE_NO_WINDOW = 0
         mb.showwarning("Untested platform",f"You are running this app on a unsuported OS, ({sys.platform}) expect bugs and errors.")
 
-APP_VERSION = 14
+APP_VERSION = 15
 default_settings = {
                     "scroll_speed":0.08,
                     "blur_amount":0.25,
@@ -76,7 +76,7 @@ default_settings = {
                     "version":APP_VERSION,
                     "openwidth_assigned":False,
                     "volume":0.5,
-                    "strip_images":False
+                    "image_compression":"Fit Resize"
                     }
 
 bookmarks = []
@@ -222,27 +222,30 @@ def safeload_song(name, usedir=False):
     uploader = ""
     image_data = None
 
-    try:
-        audio = ID3(song_dir)
+    if safe_settings_grab("load_imgs"):
+        try:
+            audio = ID3(song_dir)
 
-        try:
-            uploader = audio.get("TPE1").text[0]
-        except:
-            pass
-        try:
-            for tag in audio.values():
-                if tag.FrameID == "APIC":
-                    image_data = tag.data
-                    break                                                          
-        except Exception:
-            image_data = Image.new("RGB",(1,1))                                                                   
-        if image_data:
-            image_data = Image.open(io.BytesIO(image_data))
-        else:
-            image_data = Image.new("RGB",(1,1))
-    except Exception as e:
-        print(f"failed to grab song {name} due to the following exception: {e}")
-        image_data = Image.new("RGB",(1,1),"#1E0000")
+            try:
+                uploader = audio.get("TPE1").text[0]
+            except:
+                pass
+            try:
+                for tag in audio.values():
+                    if tag.FrameID == "APIC":
+                        image_data = tag.data
+                        break                                                          
+            except Exception:
+                image_data = Image.new("RGB",(1,1))                                                                   
+            if image_data:
+                image_data = Image.open(io.BytesIO(image_data))
+            else:
+                image_data = Image.new("RGB",(1,1))
+        except Exception as e:
+            print(f"failed to grab song {name} due to the following exception: {e}")
+            image_data = Image.new("RGB",(1,1),"#1E0000")
+    else:
+        image_data = Image.new("RGB",(1,1),"#000000")
     return [image_data, song_dir, name, uploader]
 
 def safe_settings_grab(name):
@@ -508,30 +511,19 @@ def compile_music_cache():
         elif audio_type:
             song_data = safeload_song(songname)
 
-            if safe_settings_grab("strip_images"):
-                song_data[0] = strip_songframe_image(song_data[0])
+            if safe_settings_grab("load_imgs"):
+                if safe_settings_grab("image_compression") == "Strip Images":
+                    song_data[0] = strip_songframe_image(song_data[0])
+                elif safe_settings_grab("image_compression") == "Fit Resize":
+                    song_data[0] = fit_image_vertically_to_frame(song_data[0])
 
-            all_songs.append(safeload_song(songname))
+            all_songs.append(song_data)
 
         loading_progress.set((i+1)/songlenght)
         root.update()
-        
+
     root.configure(cursor="arrow")
     loading_progress.place_forget()
-
-
-"""
-all_songs = []
-def compile_music_cache(): #CHANGE THIS
-    music_dir = song_directorys[GLOBAL_MUSIC_DIR] #list of all song names in selected dir
-    all_songs.clear()
-
-    for songname in music_dir: # filter mp3
-        if valid_audio_name(songname):
-            all_songs.append(safeload_song(songname))
-        else:
-            all_songs.append((Image.new("RGBA",size=(1,1)),None,songname,""))
-            """
 
 def show_console():
     ctypes.windll.kernel32.AllocConsole()
@@ -953,7 +945,7 @@ def save_settings():
         "version":default_settings["version"],
         "openwidth_assigned":openwith_menu_check.get(),
         "volume":volume_slider.get(),
-        "strip_images":strip_thumbnails_check.get()
+        "image_compression":thumbnail_compression.get()
         }
     print(saved_settings)
     try:
@@ -1043,7 +1035,7 @@ def restore_default_settings():
     use_thumbnails_check.select() if default_settings["load_imgs"] else use_thumbnails_check.deselect()
     show_console_startup.select() if default_settings["console_startup"] else show_console_startup.deselect()
     openwith_menu_check.select() if default_settings["openwidth_assigned"] else openwith_menu_check.deselect()
-    strip_thumbnails_check.select() if default_settings["strip_images"] else strip_thumbnails_check.deselect()
+    thumbnail_compression.set(default_settings["image_compression"])
 
     update_strip_thumbnails_warning()
     update_bluramount_text()
@@ -1128,6 +1120,17 @@ def crop_square_image(img: Image.Image, size=120):
     img = img.crop((left, top, right, bottom)) #ok so this is just a thing now i guess.. okay bro
 
     return img
+
+def fit_image_vertically_to_frame(img:Image.Image,target_width=300) -> Image.Image: 
+    width, height = img.size
+
+    scale = target_width/width
+
+    delta_width = round(width * scale)
+    delta_height = round(height * scale)
+
+    resized = img.resize((delta_width,delta_height))
+    return resized
 
 def clean_directorys_from_sample(songs:list):
     results = []
@@ -1546,20 +1549,27 @@ bg_blur_slider = ctk.CTkSlider(settmenu,width=600,command=update_bluramount_text
 bg_blur_slider.pack(anchor="w")
 bg_blur_slider.set(safe_settings_grab("blur_amount"))
 
-def update_strip_thumbnails_warning():
+def update_strip_thumbnails_warning(event=None):
     global saved_settings
-    saved_settings["strip_images"] = strip_thumbnails_check.get() #i lowk forgot how i did this before but i mean both work soooo
-    if strip_thumbnails_check.get():
-        stip_thumbnails_info_text.configure(text="Loading playlists will take longer, however, more memory will be saved.")
-        stip_thumbnails_info_title.configure(text="Memory Saver", text_color="#58FF3E")
+    saved_settings["image_compression"] = thumbnail_compression.get() #i lowk forgot how i did this before but i mean both work soooo
+    if safe_settings_grab("load_imgs"):
+        if thumbnail_compression.get() == "Strip Images":
+            stip_thumbnails_info_text.configure(text="Loading playlists will take longer, however, more memory will be saved.")
+            stip_thumbnails_info_title.configure(text="Memory Saver", text_color="#58FF3E")
+        elif thumbnail_compression.get() == "Fit Resize":
+            stip_thumbnails_info_text.configure(text="Loading playlists will take longer, however, more memory will be saved.")
+            stip_thumbnails_info_title.configure(text="Memory Saver", text_color="#58FF3E")
+        else:
+            stip_thumbnails_info_text.configure(text="Fastest loading, however the most memory is used here.")
+            stip_thumbnails_info_title.configure(text="Preformance Mode", text_color="#FFF93E")
     else:
-        stip_thumbnails_info_text.configure(text="Loading playlists will be quicker, however, more memory will used.")
-        stip_thumbnails_info_title.configure(text="Preformance Mode", text_color="#FFF93E")
+        stip_thumbnails_info_text.configure(text="Thumbnails are disabled, fastest loading and lowest memory consumption.")
+        stip_thumbnails_info_title.configure(text="Thumbnails Disabled", text_color="#FF413E")
 
-strip_thumbnails_check = ctk.CTkCheckBox(settmenu,text=f"Strip Thumbnails",font=("aeril",19,"normal"),command=update_strip_thumbnails_warning)
-strip_thumbnails_check.pack(anchor="w",pady=10)
-if safe_settings_grab("strip_images"):
-    strip_thumbnails_check.select()
+thumbnail_compression = ctk.CTkOptionMenu(settmenu,fg_color="#191919",values=["Strip Images","Fit Resize", "None"],font=("aeril",19,"normal"),command=update_strip_thumbnails_warning,width=780,button_color="#515151",button_hover_color="#343434")
+thumbnail_compression.pack(anchor="w",pady=10)
+if safe_settings_grab("image_compression"):
+    thumbnail_compression.set(safe_settings_grab("image_compression"))
 
 strip_thumbnails_info_frame = ctk.CTkFrame(settmenu,fg_color="#191919",width=680,height=65) #i am currently stuck listening to theese damn youtube ads while i fix my own music app.
 strip_thumbnails_info_frame.pack()
@@ -1596,7 +1606,12 @@ use_disc_check.pack(anchor="w")
 if safe_settings_grab("use_disc"):
     use_disc_check.select()
 
-use_thumbnails_check = ctk.CTkCheckBox(settmenu,text=f"Load Thumbnails",font=("aeril",19,"normal"))
+def use_thumbnails_update():
+    global saved_settings
+    saved_settings["load_imgs"] = use_thumbnails_check.get()
+    update_strip_thumbnails_warning()
+
+use_thumbnails_check = ctk.CTkCheckBox(settmenu,text=f"Load Thumbnails",font=("aeril",19,"normal"), command=use_thumbnails_update)
 use_thumbnails_check.pack(anchor="w")
 if safe_settings_grab("load_imgs"):
     use_thumbnails_check.select()
@@ -2257,7 +2272,7 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
     global seek_offset
 
     if songdir == None:
-        image, song_dir, name, uploader = all_songs[customindex]
+        image, song_dir, name, uploader = safeload_song(all_songs[customindex][2])
     else:
         image, song_dir, name, uploader = safeload_song(songdir,usedir=True)
 
@@ -2675,7 +2690,7 @@ def reset_menu_layers():
 
     #loading_progress.lift() id's rather this only appear when its loading
 
-def enter_songframe(event=None, index=None): #assign the option menu to a index, will be updated with update_songframes
+def enter_songframe(event=None, index=None): #assign the option menu to a index, will be updated with update songframes
     global songframe_option_index
     songframe_option_index = index
 
@@ -2912,7 +2927,7 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
             timeline_slider.set(slider_value)
 
 
-        if (current_music_lenght//1000)+1 < current_s and PLAYING_INDEX != None: # when audio is done
+        if (current_music_lenght//1000)+1 < current_s: # when audio is done
             #LOOPING
             if after_song_mode.get() == "Loop":
                 currentsongdir = CURRENT_TRACKDATA[1]
@@ -2929,6 +2944,7 @@ def interpolate_render_index(): # change the focus index as much as you want, BE
 
             #SHUFFLE
             if after_song_mode.get() == "Shuffle":
+                print("attempt random")
                 random_song() # after all of that pain, this just happens
 
             if after_song_mode.get() == "Next":
