@@ -41,7 +41,7 @@ import assets.dependancies.ui.home_ui as home_ui
 import assets.dependancies.multinstance as mutinstance
 
 # HIGHEST PRIORITY:
-    #add option for crop image, resize, or None
+
 
 # SECOND PRIORITY
     #add a "..." button to the library menu, make it contain delete and renameing functions.
@@ -64,7 +64,7 @@ def init_passes():
         CREATE_NO_WINDOW = 0
         mb.showwarning("Untested platform",f"You are running this app on a unsuported OS, ({sys.platform}) expect bugs and errors.")
 
-APP_VERSION = 15
+APP_VERSION = 16
 default_settings = {
                     "scroll_speed":0.08,
                     "blur_amount":0.25,
@@ -456,7 +456,7 @@ def lw_add_song(name, include_cdir=False): #im calling theese "lightweight" func
 
 
 def lw_append_song_to_cdir(name): 
-    songframe, image_label, title_label = songframe_template(name)
+    songframe, image_label, title_label = songframe_template(name) #get UI (name is sanatized in template)
 
     i = len(all_songs)
 
@@ -467,10 +467,23 @@ def lw_append_song_to_cdir(name):
     image_label.bind("<Leave>", bind_leave_cursor)
     title_label.bind("<Leave>",bind_leave_cursor)
     
-    all_songs.append(safeload_song(name))
-    song_frames.insert(i,(songframe, image_label, title_label))
-    song_directorys[GLOBAL_MUSIC_DIR].append(name)
-    song_directorys[GLOBAL_MUSIC_DIR].sort()
+    song_data = safeload_song(name)
+    
+    if safe_settings_grab("load_imgs"):
+        if safe_settings_grab("image_compression") == "Strip Images":
+            song_data[0] = strip_songframe_image(song_data[0])
+        elif safe_settings_grab("image_compression") == "Fit Resize":
+            song_data[0] = fit_image_vertically_to_frame(song_data[0])
+
+    all_songs.append(song_data)
+
+    image_label.ctkimage = ctk.CTkImage(all_songs[i][0],size=all_songs[i][0].size)
+    image_label.configure(image=image_label.ctkimage)
+
+    song_frames.insert(i,(songframe, image_label, title_label)) #registster to UI data (tell update songframes that this frame should move)
+    song_directorys[GLOBAL_MUSIC_DIR].append(name) # register to directory
+    song_directorys[GLOBAL_MUSIC_DIR].sort() #sort
+    
 
     reset_menu_layers()
 
@@ -1554,30 +1567,33 @@ def update_strip_thumbnails_warning(event=None):
     saved_settings["image_compression"] = thumbnail_compression.get() #i lowk forgot how i did this before but i mean both work soooo
     if safe_settings_grab("load_imgs"):
         if thumbnail_compression.get() == "Strip Images":
-            stip_thumbnails_info_text.configure(text="Loading playlists will take longer, however, more memory will be saved.")
+            stip_thumbnails_info_text.configure(text="Crop images to only visible parts.\nLoading will take longer. However, more memory will be saved.")
             stip_thumbnails_info_title.configure(text="Memory Saver", text_color="#58FF3E")
         elif thumbnail_compression.get() == "Fit Resize":
-            stip_thumbnails_info_text.configure(text="Loading playlists will take longer, however, more memory will be saved.")
+            stip_thumbnails_info_text.configure(text="Downscale images to fit the songframe.\nLoading will take longer. However, more memory will be saved.")
             stip_thumbnails_info_title.configure(text="Memory Saver", text_color="#58FF3E")
         else:
-            stip_thumbnails_info_text.configure(text="Fastest loading, however the most memory is used here.")
+            stip_thumbnails_info_text.configure(text="No compressoion. Fastest loading, however the most memory is used here.")
             stip_thumbnails_info_title.configure(text="Preformance Mode", text_color="#FFF93E")
     else:
         stip_thumbnails_info_text.configure(text="Thumbnails are disabled, fastest loading and lowest memory consumption.")
         stip_thumbnails_info_title.configure(text="Thumbnails Disabled", text_color="#FF413E")
+
+compression_title = ctk.CTkLabel(settmenu,text=f"Compression Method",font=("aeril",19,"normal"))
+compression_title.pack(anchor="w")
 
 thumbnail_compression = ctk.CTkOptionMenu(settmenu,fg_color="#191919",values=["Strip Images","Fit Resize", "None"],font=("aeril",19,"normal"),command=update_strip_thumbnails_warning,width=780,button_color="#515151",button_hover_color="#343434")
 thumbnail_compression.pack(anchor="w",pady=10)
 if safe_settings_grab("image_compression"):
     thumbnail_compression.set(safe_settings_grab("image_compression"))
 
-strip_thumbnails_info_frame = ctk.CTkFrame(settmenu,fg_color="#191919",width=680,height=65) #i am currently stuck listening to theese damn youtube ads while i fix my own music app.
+strip_thumbnails_info_frame = ctk.CTkFrame(settmenu,fg_color="#191919",width=680,height=75) #i am currently stuck listening to theese damn youtube ads while i fix my own music app.
 strip_thumbnails_info_frame.pack()
 
 stip_thumbnails_info_title = ctk.CTkLabel(strip_thumbnails_info_frame,text="undetermined",font=("aeril",16,"bold"))
 stip_thumbnails_info_title.place(x=10,y=2)
 
-stip_thumbnails_info_text = ctk.CTkLabel(strip_thumbnails_info_frame,text="undetermined",font=("aeril",16,"normal"))
+stip_thumbnails_info_text = ctk.CTkLabel(strip_thumbnails_info_frame,text="undetermined",font=("aeril",16,"normal"),justify="left")
 stip_thumbnails_info_text.place(x=10,y=28)
 
 update_strip_thumbnails_warning()
@@ -2279,7 +2295,9 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
     if song_dir:
         if os.path.exists(song_dir): 
             head, tail = os.path.splitext(name)
-            CURRENT_TRACKDATA = (image,song_dir,name)
+            song_name = os.path.basename(name)
+            
+            CURRENT_TRACKDATA = (image,song_dir,song_name)
             mixer.music.load(song_dir)
             
             if tail == ".mp3":
@@ -2296,7 +2314,7 @@ def select_song(customindex=FOCUS_INDEX, songdir=None):
             
             reload_bookmarks() # conveient lil guy, aint he?
             #title update-----------------------------------------------
-            current_song_name = sanatize_UI_songname(name)
+            current_song_name = sanatize_UI_songname(song_name)
             song_title_text.configure(text=current_song_name)
             song_creator_text.configure(text=uploader)
 
@@ -2453,6 +2471,8 @@ def remove_song_from_cdir():
 
 
 def rename_song_from_entry(): #nope it wasent apparently good enough.. NOW IT IS THOUGH!
+    
+
     global song_directorys, all_library_songs, bookmarks
     original_name = all_songs[songframe_option_index][2]
 
@@ -2496,7 +2516,8 @@ def rename_song_from_entry(): #nope it wasent apparently good enough.. NOW IT IS
                 rename_status.configure(text=f"OS Error: {e}")
                 print(f"rename cancelled due to os error. (invalid, already taken, ect...)\n{e}")
                 return
-
+            cancel_rename_btn.configure(state="disabled")
+            apply_rename_btn.configure(state="disabled")
             all_directorys = list(song_directorys.keys())
 
             for cdir in all_directorys: #change all references in song_directorys
@@ -2538,6 +2559,9 @@ def rename_song_from_entry(): #nope it wasent apparently good enough.. NOW IT IS
             rename_status.configure(text="Directory already exists!")
             return
 
+        cancel_rename_btn.configure(state="disabled")
+        apply_rename_btn.configure(state="disabled")
+
         all_directorys = list(song_directorys.keys())
         for i in range(len(all_directorys)):
             cdir = all_directorys[i]
@@ -2562,6 +2586,9 @@ def rename_song_from_entry(): #nope it wasent apparently good enough.. NOW IT IS
                 song_directorys.pop(cdir)                                             #remove the folder
                 song_directorys[cdir.replace(original_name,newname)] = contentsave #make a new one with same contents, but new dir
 
+    cancel_rename_btn.configure(state="normal")
+    apply_rename_btn.configure(state="normal")
+
     reload_current_directory_ui() #reload the UI with the new data.
     close_rename_menu()
 
@@ -2570,35 +2597,38 @@ def close_rename_menu():
     animate_close_menu(rename_frame,0.2,1,True)
     close.place(relx=0.95,rely=0.01)
 
-rename_frame = ctk.CTkFrame(root,width=400,height=200,border_width=1,border_color="#666666")
-rename_frame.place(relx=0.2,rely=-1)
+rename_frame = ctk.CTkFrame(root,width=500,height=240,border_width=1,border_color="#666666")
+rename_frame.place(relx=0.15,rely=-1)
 
-rename_title = ctk.CTkLabel(rename_frame,text="Rename Song",font=("",18,"bold")) #why dose this spelling look so wrong?
+rename_title = ctk.CTkLabel(rename_frame,text="Rename Song",font=("",19,"bold")) #why dose this spelling look so wrong?
 rename_title.place(x=5,y=5)
 
-old_name_rename = ctk.CTkLabel(rename_frame,text="Old Name:",font=("",15,"normal")) 
-old_name_rename.place(x=5,y=31)
+rename_title_separator = ctk.CTkFrame(rename_frame,height=2,fg_color="#666666")
+rename_title_separator.place(relx=0.05,relwidth=0.9,y=40)
 
-old_name_entry = ctk.CTkEntry(rename_frame,font=("",10,"normal"),width=380,height=26) 
-old_name_entry.place(x=5,y=54)
+old_name_rename = ctk.CTkLabel(rename_frame,text="Old Name:",font=("",15,"normal")) 
+old_name_rename.place(x=5,y=45)
+
+old_name_entry = ctk.CTkEntry(rename_frame,font=("",14,"normal"),width=480,height=26) 
+old_name_entry.place(x=5,y=70)
 
 new_name_rename = ctk.CTkLabel(rename_frame,text="New Name:",font=("",15,"normal")) 
-new_name_rename.place(x=5,y=85)
+new_name_rename.place(x=5,y=110)
 
-new_name_entry = ctk.CTkEntry(rename_frame,font=("",10,"normal"),width=380,height=26)
-new_name_entry.place(x=5,y=110)
+new_name_entry = ctk.CTkEntry(rename_frame,font=("",14,"normal"),width=480,height=26)
+new_name_entry.place(x=5,y=140)
 
-rename_status = ctk.CTkLabel(rename_frame,text="",font=("aerial",10,"normal"),height=20,text_color="red")
-rename_status.place(x=5,y=140)
+rename_status = ctk.CTkLabel(rename_frame,text="",font=("aerial",15,"bold"),height=20,text_color="red")
+rename_status.place(x=150,y=10)
 
-cancel_rename_btn = ctk.CTkButton(rename_frame,text="Cancel",border_width=1,border_color="#666666",height=20,fg_color="#333333",hover_color="#320000",command=close_rename_menu)# ive really been likeing this style but i gotta add themes soon so hopefully the idea sticks...
-apply_rename_btn = ctk.CTkButton(rename_frame,text="Rename",border_width=1,border_color="#666666",height=20,fg_color="#333333",hover_color="#111111",command=rename_song_from_entry)
+cancel_rename_btn = ctk.CTkButton(rename_frame,text="Cancel",border_width=1,border_color="#666666",height=26,fg_color="#333333",hover_color="#320000",command=close_rename_menu)# ive really been likeing this style but i gotta add themes soon so hopefully the idea sticks...
+apply_rename_btn = ctk.CTkButton(rename_frame,text="Rename",border_width=1,border_color="#666666",height=26,fg_color="#333333",hover_color="#111111",command=rename_song_from_entry)
 
-cancel_rename_btn.place(rely=0.83,relx=0.02)
-apply_rename_btn.place(rely=0.83,relx=0.62)
+cancel_rename_btn.place(relx=0.02,relwidth=0.95,rely=0.74)
+apply_rename_btn.place(relx=0.02,relwidth=0.95,rely=0.87)
 
 
-#delete menu: (ok i kind of took the replace menu CUZ IT DOSNT LOOK THAT BAD--)
+#delete menu:
 delete_frame = ctk.CTkFrame(root,width=400,height=280,border_width=1,border_color="#666666")
 delete_frame.place(relx=0.2,rely=-1)
 
@@ -2639,7 +2669,7 @@ def open_rename_menu():
 
     reset_menu_layers()
     
-    animate_open_menu(rename_frame,-0.5,0.2,True)
+    animate_open_menu(rename_frame,-1,0.2,True)
 
 song_options_rename = ctk.CTkButton(song_options_frame,text="✏️ Rename",width=90,fg_color="#000000",hover_color="#151515",command=open_rename_menu)
 song_options_rename.pack(padx=5,pady=(10,5))
@@ -2687,8 +2717,10 @@ def reset_menu_layers():
     musicmenu.lift()
     library_menu_frame.lift()
     external_import_menu.lift()
+    rename_frame.lift()
+    delete_frame.lift()
+    settmenu.lift()
 
-    #loading_progress.lift() id's rather this only appear when its loading
 
 def enter_songframe(event=None, index=None): #assign the option menu to a index, will be updated with update songframes
     global songframe_option_index
@@ -2739,6 +2771,10 @@ def create_songframes():
         _,_,songname, _ = all_songs[i]
 
         song_frame, image_label, title_label = songframe_template(songname)
+
+        image_label.ctkimage = ctk.CTkImage(all_songs[i][0],size=all_songs[i][0].size)
+        image_label.configure(image=image_label.ctkimage)
+
         song_frames.append((song_frame, image_label, title_label))
         
         image_label.bind("<Button-1>", lambda event, idx=i: bind_songframe_button_thing(idx))
@@ -2749,13 +2785,17 @@ def create_songframes():
         title_label.bind("<Leave>",bind_leave_cursor)
 
     if GLOBAL_MUSIC_DIR != BASE_DIR: # if its changed   oommgg this is SOOO mUCH BETTER then the last one
-        all_gdirnames = GLOBAL_MUSIC_DIR.replace('\\',"/").split("/")
+        print(GLOBAL_MUSIC_DIR)
+        all_gdirnames = GLOBAL_MUSIC_DIR.split("\\")
         gdirlen = len(all_gdirnames)
 
         short_gdirname = f".../{all_gdirnames[gdirlen-2]} / {all_gdirnames[gdirlen-1]}"
 
         back_frame, back_image_label, back_title_label = songframe_template("<< Back")
-        dir_frame, image_label, title_label = songframe_template(short_gdirname+"     ")
+        dir_frame, image_label, title_label = songframe_template(short_gdirname)
+
+        dir_frame.configure(fg_color="black")
+        title_label.configure(fg_color="black")
 
         song_frames.append((back_frame, image_label, back_title_label))
         song_frames.append((dir_frame, image_label, title_label))
@@ -2803,10 +2843,6 @@ def get_average_color(img: Image.Image):
 def update_songframes(spaceing=15):
     for i in range(len(song_frames)):
         song_frame, image_label, _ = song_frames[i]
-        if i <= len(all_songs)-1: #if in range, ignore back button and dir label
-            if image_label.ctkimage is None and all_songs[i][0] is not None:
-                image_label.ctkimage = ctk.CTkImage(all_songs[i][0],size=all_songs[i][0].size)
-                image_label.configure(image=image_label.ctkimage)
 
         offset = (i - RENDER_INDEX)
         norm = offset * 0.25  # normalized angle
@@ -2988,11 +3024,19 @@ def keyrelease(event):
             manage_pause()
         if key == "Tab" and current_view_mode == "playlists":
             toggle_libary_menu()
+        if key == "Return":
+            random_song()
+        if key == "minus":
+            volume_slider.set(volume_slider.get()-0.1)
+            set_volume_slider()
+        if key == "r":
+            reload_current_directory_ui()
+        if key == "equal":
+            volume_slider.set(volume_slider.get()+0.1)
+            set_volume_slider()
         if key == "h":
             if focus_step == "focused":
                 focus_animation(focused=False) 
-
-
 
     if key == "7":
         show_console()
@@ -3009,7 +3053,6 @@ def safe_save_appdata(path, value):
 # UI INITS------------------------------
 profile_import_menu(yt_import_frame) #make the import menu start on the youtube frame
 
-root.iconbitmap(placeify_ico)
 root.bind("<MouseWheel>",scroll_wheel)
 root.bind("<KeyRelease>",keyrelease)
 
@@ -3030,8 +3073,7 @@ if is_new_user:
 else:
     kickstart_song_systems()
 
-
-
+root.iconbitmap(placeify_ico)
 root.mainloop()
 
 print(" SHUTDOWN -------------------------------------------------")
