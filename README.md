@@ -1,17 +1,17 @@
-Placeify is a free, open-source music player that lets you import songs directly from YouTube and Spotify, then listen to them offline without ads, buffering, subscriptions, or other nonsense.
+Placeify is a free, open-source music player focused on offline listening, playlist management, and local music libraries. Organize your music in a lightweight, customizable interface with support for local files and additional import options.
 
 
 Features:
 ---
-- ⬇️ Import music from YouTube or Spotify Links
-- 📵 Offline playback (no ads, no buffering)
+- ⬇️ Import your music
+- 📵 Offline, instant playback
 - 📂 Custom directories (playlists/albums)
 - 🔀 Shuffle + loop
 - ➡️ Next/previous track
 - 🖼️ Thumbnail support
 - 🫧 Clean, modern UI with VERY cool animations
 - 🔧 Fully open‑source
-- 🪟 Windows EXE build available (no linux, sorry)
+- 🪟 Windows EXE build available (no linux, sorry...)
 - AND MORE!!!!!!
 -------------------------------------------------------------------------------
 **HOW TO USE**
@@ -23,7 +23,7 @@ Features:
   
   1. Open `placeify.exe`
   2. Click the + button
-  3. Paste a YouTube, or Spotify playlist/URL (it MUST BE PUBLIC!!!) 
+  3. Add music from local files or supported sources.
   4. Hit Import
   5. Enjoy!!!
   
@@ -45,7 +45,7 @@ If you want to run main.py, you’ll need these dependencies installed:
 | `customtkinter` | Graphics Library |
 | `pillow` | Image Management / Editing |
 | `pygame` | Music Player |
-| `yt-dlp` | Audio Downloading |
+| `yt-dlp` | Audio Import Support |
 | `pypresence` | Discord Rich Presence (optional, dont worry.) |
 | `pywinstyles` | Extra UI effects (Opacity support for `ctk`) |
 | `mutagen` | ID3 Tag Management (Title, Author, Image) |
@@ -85,7 +85,7 @@ Even though most bugs and errors have been sorted out, there are still always th
 3.  Open an issue on GitHub.
 4.  Include any useful logs.
 
-also, please don't report that the codebase is ugly, trust me,
+also, please don't report that the codebase is ugly, trust me,\
 **i know.**
 
 ![Project Logo](./assets/placeify.png)
